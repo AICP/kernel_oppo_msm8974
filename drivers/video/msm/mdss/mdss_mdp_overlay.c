@@ -1309,7 +1309,7 @@ static int mdss_mdp_overlay_queue(struct msm_fb_data_type *mfd,
 	return ret;
 }
 
-static int mdss_mdp_overlay_force_cleanup(struct msm_fb_data_type *mfd)
+static void mdss_mdp_overlay_force_cleanup(struct msm_fb_data_type *mfd)
 {
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
 	struct mdss_mdp_ctl *ctl = mdp5_data->ctl;
@@ -1327,9 +1327,7 @@ static int mdss_mdp_overlay_force_cleanup(struct msm_fb_data_type *mfd)
 			mdss_mdp_display_wait4comp(ctl);
 	}
 
-	ret = mdss_mdp_overlay_cleanup(mfd);
-
-	return ret;
+	mdss_mdp_overlay_cleanup(mfd);
 }
 
 static void mdss_mdp_overlay_force_dma_cleanup(struct mdss_data_type *mdata)
