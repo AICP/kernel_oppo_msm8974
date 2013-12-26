@@ -921,9 +921,9 @@ static __devinit int msm_pcm_probe(struct platform_device *pdev)
 	const char *latency_level;
 
 	rc = of_property_read_u32(pdev->dev.of_node,
-				"qti,msm-pcm-dsp-id", &id);
+				"qcom,msm-pcm-dsp-id", &id);
 	if (rc) {
-		dev_err(&pdev->dev, "%s: qti,msm-pcm-dsp-id missing in DT node\n",
+		dev_err(&pdev->dev, "%s: qcom,msm-pcm-dsp-id missing in DT node\n",
 					__func__);
 		return rc;
 	}
@@ -967,7 +967,7 @@ static int msm_pcm_remove(struct platform_device *pdev)
 	return 0;
 }
 static const struct of_device_id msm_pcm_dt_match[] = {
-	{.compatible = "qti,msm-pcm-dsp"},
+	{.compatible = "qcom,msm-pcm-dsp"},
 	{}
 };
 MODULE_DEVICE_TABLE(of, msm_pcm_dt_match);
