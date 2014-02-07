@@ -85,12 +85,21 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable)
 			goto error;
 		}
 
-		if (pdata->panel_info.panel_power_on == 0)
-			mdss_dsi_panel_reset(pdata, 1);
-
+		if (pdata->panel_info.panel_power_on == 0) {
+			ret = mdss_dsi_panel_reset(pdata, 1);
+			if (ret) {
+				pr_err("%s: Panel reset failed. rc=%d\n",
+						__func__, ret);
+				if (msm_dss_enable_vreg(
+				ctrl_pdata->power_data.vreg_config,
+				ctrl_pdata->power_data.num_vreg, 0))
+					pr_err("Disable vregs failed\n");
+				goto error;
+			}
+		}
 	} else {
 
-		mdss_dsi_panel_reset(pdata, 0);
+		ret = mdss_dsi_panel_reset(pdata, 0);
 
 #ifndef VENDOR_EDIT
 /* Xiaori.Yuan@Mobile Phone Software Dept.Driver, 2014/04/02  Modify for probabilistic blurred screen for find7s */
@@ -429,20 +438,29 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 		return ret;
 	}
 
-	pdata->panel_info.panel_power_on = 1;
-
-	if (!pdata->panel_info.mipi.lp11_init)
-		mdss_dsi_panel_reset(pdata, 1);
-
+	if (!pdata->panel_info.mipi.lp11_init) {
+		ret = mdss_dsi_panel_reset(pdata, 1);
+		if (ret) {
+			pr_err("%s: Panel reset failed. rc=%d\n",
+					__func__, ret);
+			return ret;
+		}
+	}
 	ret = mdss_dsi_bus_clk_start(ctrl_pdata);
 	if (ret) {
 		pr_err("%s: failed to enable bus clocks. rc=%d\n", __func__,
 			ret);
-		mdss_dsi_panel_power_on(pdata, 0);
+		ret = mdss_dsi_panel_power_on(pdata, 0);
+		if (ret) {
+			pr_err("%s: Panel reset failed. rc=%d\n",
+					__func__, ret);
+			return ret;
+		}
 		pdata->panel_info.panel_power_on = 0;
 		return ret;
 	}
 
+	pdata->panel_info.panel_power_on = 1;
 	mdss_dsi_phy_sw_reset((ctrl_pdata->ctrl_base));
 	mdss_dsi_phy_init(pdata);
 	mdss_dsi_bus_clk_stop(ctrl_pdata);
@@ -524,9 +542,14 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 	 * Issue hardware reset line after enabling the DSI clocks and data
 	 * data lanes for LP11 init
 	 */
-	if (pdata->panel_info.mipi.lp11_init)
-		mdss_dsi_panel_reset(pdata, 1);
-
+	if (pdata->panel_info.mipi.lp11_init) {
+		ret = mdss_dsi_panel_reset(pdata, 1);
+		if (ret) {
+			pr_err("%s: Panel reset failed. rc=%d\n",
+					__func__, ret);
+			return ret;
+		}
+	}
 	if (pdata->panel_info.mipi.init_delay)
 		usleep(pdata->panel_info.mipi.init_delay);
 
@@ -1346,18 +1369,9 @@ ctrl_pdata->index=index;
 	ctrl_pdata->disp_en_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 		"qcom,platform-enable-gpio", 0);
 
-	if (!gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
+	if (!gpio_is_valid(ctrl_pdata->disp_en_gpio))
 		pr_err("%s:%d, Disp_en gpio not specified\n",
 						__func__, __LINE__);
-	} else {
-		rc = gpio_request(ctrl_pdata->disp_en_gpio, "disp_enable");
-		if (rc) {
-			pr_err("request reset gpio failed, rc=%d\n",
-			       rc);
-			gpio_free(ctrl_pdata->disp_en_gpio);
-			return -ENODEV;
-		}
-	}
 
 #ifdef VENDOR_EDIT
 /* Xiaori.Yuan@Mobile Phone Software Dept.Driver, 2014/03/13  Add for Find7s enable display -5v */
@@ -1400,7 +1414,6 @@ ctrl_pdata->index=index;
 		if (rc) {
 			pr_err("request TE gpio failed, rc=%d\n",
 			       rc);
-			gpio_free(ctrl_pdata->disp_te_gpio);
 			return -ENODEV;
 		}
 		rc = gpio_tlmm_config(GPIO_CFG(
@@ -1482,44 +1495,18 @@ ctrl_pdata->index=index;
 //yanghai add end
 	ctrl_pdata->rst_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 			 "qcom,platform-reset-gpio", 0);
-	if (!gpio_is_valid(ctrl_pdata->rst_gpio)) {
+	if (!gpio_is_valid(ctrl_pdata->rst_gpio))
 		pr_err("%s:%d, reset gpio not specified\n",
 						__func__, __LINE__);
-	} else {
-		rc = gpio_request(ctrl_pdata->rst_gpio, "disp_rst_n");
-		if (rc) {
-			pr_err("request reset gpio failed, rc=%d\n",
-				rc);
-			gpio_free(ctrl_pdata->rst_gpio);
-			if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
-				gpio_free(ctrl_pdata->disp_en_gpio);
-			return -ENODEV;
-		}
-	}
 
 	if (pinfo->mode_gpio_state != MODE_GPIO_NOT_VALID) {
 
 		ctrl_pdata->mode_gpio = of_get_named_gpio(
 					ctrl_pdev->dev.of_node,
 					"qcom,platform-mode-gpio", 0);
-		if (!gpio_is_valid(ctrl_pdata->mode_gpio)) {
+		if (!gpio_is_valid(ctrl_pdata->mode_gpio))
 			pr_info("%s:%d, mode gpio not specified\n",
 							__func__, __LINE__);
-		} else {
-			rc = gpio_request(ctrl_pdata->mode_gpio, "panel_mode");
-			if (rc) {
-				pr_err("request panel mode gpio failed,rc=%d\n",
-									rc);
-				gpio_free(ctrl_pdata->mode_gpio);
-				if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
-					gpio_free(ctrl_pdata->disp_en_gpio);
-				if (gpio_is_valid(ctrl_pdata->rst_gpio))
-					gpio_free(ctrl_pdata->rst_gpio);
-				if (gpio_is_valid(ctrl_pdata->disp_te_gpio))
-					gpio_free(ctrl_pdata->disp_te_gpio);
-				return -ENODEV;
-			}
-		}
 	}
 /* OPPO 2014-02-21 yxq add begin for Find7S */
 		}else{
@@ -1579,10 +1566,6 @@ ctrl_pdata->index=index;
 	rc = mdss_register_panel(ctrl_pdev, &(ctrl_pdata->panel_data));
 	if (rc) {
 		pr_err("%s: unable to register MIPI DSI panel\n", __func__);
-		if (ctrl_pdata->rst_gpio)
-			gpio_free(ctrl_pdata->rst_gpio);
-		if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
-			gpio_free(ctrl_pdata->disp_en_gpio);
 		return rc;
 	}
 
