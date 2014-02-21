@@ -388,7 +388,6 @@ static int mdss_mdp_cmd_remove_vsync_handler(struct mdss_mdp_ctl *ctl,
 		return -ENODEV;
 	}
 
-
 	spin_lock_irqsave(&ctx->clk_lock, flags);
 	if (handle->enabled) {
 		handle->enabled = false;
