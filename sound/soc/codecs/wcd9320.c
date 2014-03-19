@@ -35,6 +35,8 @@
 #include <linux/pm_runtime.h>
 #include <linux/kernel.h>
 #include <linux/gpio.h>
+#include <linux/pm_qos.h>
+#include <mach/cpuidle.h>
 #include "wcd9320.h"
 #include "wcd9xxx-resmgr.h"
 #include "wcd9xxx-common.h"
@@ -482,6 +484,7 @@ struct taiko_priv {
 	#endif
 
 	struct wake_lock taiko_mad_wlock; //2014-2-13 xuzhaoan add for SVA patch
+	struct pm_qos_request pm_qos_req;
 };
 
 /* OPPO 2013-11-12 xuzhaoan Add begin for American Headset Detect */
@@ -2988,6 +2991,9 @@ static int taiko_codec_config_mad(struct snd_soc_codec *codec)
 
 	pr_debug("%s: enter\n", __func__);
 	wake_lock(&taiko->taiko_mad_wlock); //2014-2-13 xuzhaoan add for SVA patch
+	/* wakeup for codec calibration access */
+	pm_qos_update_request(&taiko->pm_qos_req,
+			      msm_cpuidle_get_deep_idle_latency());
 	ret = request_firmware(&fw, filename, codec->dev);
 	if (ret != 0) {
 		pr_err("Failed to acquire MAD firwmare data %s: %d\n", filename,
@@ -3059,6 +3065,8 @@ static int taiko_codec_config_mad(struct snd_soc_codec *codec)
 	pr_debug("%s: leave ret %d\n", __func__, ret);
 
 	wake_unlock(&taiko->taiko_mad_wlock); //2014-2-13 xuzhaoan add for SVA patch 2-25 uncomment this line to release wakelock to save power
+	pm_qos_update_request(&taiko->pm_qos_req,
+			      PM_QOS_DEFAULT_VALUE);
 	return ret;
 }
 
