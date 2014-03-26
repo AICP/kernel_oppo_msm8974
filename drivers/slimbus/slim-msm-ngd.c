@@ -1184,6 +1184,7 @@ static int __devinit ngd_slim_probe(struct platform_device *pdev)
 	struct resource		*irq, *bam_irq;
 	bool			rxreg_access = false;
 	bool			slim_mdm = false;
+	const char		*ext_modem_id = NULL;
 
 	#ifdef CONFIG_VENDOR_EDIT
        //liuyan 2013-12-17 modify for at current
@@ -1276,8 +1277,10 @@ static int __devinit ngd_slim_probe(struct platform_device *pdev)
 					&dev->pdata.apps_pipes);
 		of_property_read_u32(pdev->dev.of_node, "qcom,ea-pc",
 					&dev->pdata.eapc);
-		slim_mdm = of_property_read_bool(pdev->dev.of_node,
-					"qcom,slim-mdm");
+		ret = of_property_read_string(pdev->dev.of_node,
+					"qcom,slim-mdm", &ext_modem_id);
+		if (!ret)
+			slim_mdm = true;
 	} else {
 		dev->ctrl.nr = pdev->id;
 	}
@@ -1351,7 +1354,7 @@ static int __devinit ngd_slim_probe(struct platform_device *pdev)
 
 	if (slim_mdm) {
 		dev->mdm.nb.notifier_call = mdm_ssr_notify_cb;
-		dev->mdm.ssr = subsys_notif_register_notifier("external_modem",
+		dev->mdm.ssr = subsys_notif_register_notifier(ext_modem_id,
 							&dev->mdm.nb);
 		if (IS_ERR_OR_NULL(dev->mdm.ssr))
 			dev_err(dev->dev,
