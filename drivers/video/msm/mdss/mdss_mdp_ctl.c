@@ -22,6 +22,7 @@
 
 #include "mdss_fb.h"
 #include "mdss_mdp.h"
+#include "mdss_mdp_trace.h"
 
 #ifdef VENDOR_EDIT
 /* Xiaori.Yuan@Mobile Phone Software Dept.Driver, 2014/04/11  Add for blue screen before recovery mode */
@@ -1957,6 +1958,7 @@ static int mdss_mdp_mixer_setup(struct mdss_mdp_ctl *ctl,
 	if (!mixer)
 		return -ENODEV;
 
+	trace_mdp_mixer_update(mixer->num);
 	pr_debug("setup mixer=%d\n", mixer->num);
 
 	outsize = (mixer->roi.h << 16) | mixer->roi.w;
@@ -2061,6 +2063,8 @@ static int mdss_mdp_mixer_setup(struct mdss_mdp_ctl *ctl,
 			blend_color_out = 0;
 
 		mixercfg |= stage << (3 * pipe->num);
+
+		trace_mdp_sspp_change(pipe);
 
 		pr_debug("stg=%d op=%x fg_alpha=%x bg_alpha=%x\n", stage,
 					blend_op, fg_alpha, bg_alpha);
@@ -2476,6 +2480,8 @@ int mdss_mdp_display_wait4comp(struct mdss_mdp_ctl *ctl)
 
 	if (ctl->wait_fnc)
 		ret = ctl->wait_fnc(ctl, NULL);
+
+	trace_mdp_commit(ctl);
 
 	mdss_mdp_ctl_perf_update(ctl, 0);
 
