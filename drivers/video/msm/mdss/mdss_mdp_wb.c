@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -51,7 +51,8 @@ enum mdss_mdp_wb_node_state {
 	REGISTERED,
 	IN_FREE_QUEUE,
 	IN_BUSY_QUEUE,
-	WITH_CLIENT
+	WITH_CLIENT,
+	WB_BUFFER_READY,
 };
 
 struct mdss_mdp_wb_data {
@@ -60,10 +61,13 @@ struct mdss_mdp_wb_data {
 	struct msmfb_data buf_info;
 	struct mdss_mdp_data buf_data;
 	int state;
+	bool user_alloc;
 };
 
 static DEFINE_MUTEX(mdss_mdp_wb_buf_lock);
 static struct mdss_mdp_wb mdss_mdp_wb_info;
+
+static void mdss_mdp_wb_free_node(struct mdss_mdp_wb_data *node);
 
 #ifdef DEBUG_WRITEBACK
 /* for debugging: writeback output buffer to allocated memory */
@@ -123,6 +127,34 @@ struct mdss_mdp_data *mdss_mdp_wb_debug_buffer(struct msm_fb_data_type *mfd)
 }
 #endif
 
+/*
+ * mdss_mdp_get_secure() - Queries the secure status of a writeback session
+ * @mfd:                   Frame buffer device structure
+ * @enabled:               Pointer to convey if session is secure
+ *
+ * This api enables an entity (userspace process, driver module, etc.) to
+ * query the secure status of a writeback session. The secure status is
+ * then supplied via a pointer.
+ */
+int mdss_mdp_wb_get_secure(struct msm_fb_data_type *mfd, uint8_t *enabled)
+{
+	struct mdss_mdp_wb *wb = mfd_to_wb(mfd);
+	if (!wb)
+		return -EINVAL;
+	*enabled = wb->is_secure;
+	return 0;
+}
+
+/*
+ * mdss_mdp_set_secure() - Updates the secure status of a writeback session
+ * @mfd:                   Frame buffer device structure
+ * @enable:                New secure status (1: secure, 0: non-secure)
+ *
+ * This api enables an entity to modify the secure status of a writeback
+ * session. If enable is 1, we allocate a secure pipe so that MDP is
+ * allowed to write back into the secure buffer. If enable is 0, we
+ * deallocate the secure pipe (if it was allocated previously).
+ */
 int mdss_mdp_wb_set_secure(struct msm_fb_data_type *mfd, int enable)
 {
 	struct mdss_mdp_wb *wb = mfd_to_wb(mfd);
@@ -131,6 +163,10 @@ int mdss_mdp_wb_set_secure(struct msm_fb_data_type *mfd, int enable)
 	struct mdss_mdp_mixer *mixer;
 
 	pr_debug("setting secure=%d\n", enable);
+	if ((enable != 1) && (enable != 0)) {
+		pr_err("Invalid enable value = %d\n", enable);
+		return -EINVAL;
+	}
 
 	if (!ctl || !ctl->mdata) {
 		pr_err("%s : ctl is NULL", __func__);
@@ -252,6 +288,7 @@ static int mdss_mdp_wb_terminate(struct msm_fb_data_type *mfd)
 		struct mdss_mdp_wb_data *node, *temp;
 		list_for_each_entry_safe(node, temp, &wb->register_queue,
 					 registered_entry) {
+			mdss_mdp_wb_free_node(node);
 			list_del(&node->registered_entry);
 			kfree(node);
 		}
@@ -368,12 +405,24 @@ static struct mdss_mdp_wb_data *get_user_node(struct msm_fb_data_type *mfd,
 	struct mdss_mdp_img_data *buf;
 	int ret;
 
+	if (!list_empty(&wb->register_queue)) {
+		list_for_each_entry(node, &wb->register_queue, registered_entry)
+			if ((node->buf_info.memory_id == data->memory_id) &&
+				    (node->buf_info.offset == data->offset)) {
+				pr_debug("found node fd=%x off=%x addr=%x\n",
+						data->memory_id, data->offset,
+						node->buf_data.p[0].addr);
+				return node;
+			}
+	}
+
 	node = kzalloc(sizeof(struct mdss_mdp_wb_data), GFP_KERNEL);
 	if (node == NULL) {
 		pr_err("out of memory\n");
 		return NULL;
 	}
 
+	node->user_alloc = true;
 	node->buf_data.num_planes = 1;
 	buf = &node->buf_data.p[0];
 	if (wb->is_secure)
@@ -401,11 +450,28 @@ register_fail:
 	return NULL;
 }
 
+static void mdss_mdp_wb_free_node(struct mdss_mdp_wb_data *node)
+{
+	struct mdss_mdp_img_data *buf;
+
+	if (node->user_alloc) {
+		buf = &node->buf_data.p[0];
+		pr_debug("free user node mem_id=%d offset=%u addr=0x%x\n",
+				node->buf_info.memory_id,
+				node->buf_info.offset,
+				buf->addr);
+
+		mdss_mdp_put_img(&node->buf_data.p[0]);
+		node->user_alloc = false;
+	}
+}
+
 static int mdss_mdp_wb_queue(struct msm_fb_data_type *mfd,
 				struct msmfb_data *data, int local)
 {
 	struct mdss_mdp_wb *wb = mfd_to_wb(mfd);
 	struct mdss_mdp_wb_data *node = NULL;
+	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
 	int ret = 0;
 
 	if (!wb) {
@@ -415,19 +481,46 @@ static int mdss_mdp_wb_queue(struct msm_fb_data_type *mfd,
 
 	pr_debug("fb%d queue\n", wb->fb_ndx);
 
+	if (!mfd->panel_info->cont_splash_enabled)
+		mdss_iommu_attach(mdp5_data->mdata);
+
 	mutex_lock(&wb->lock);
 	if (local)
 		node = get_local_node(wb, data);
 	if (node == NULL)
 		node = get_user_node(mfd, data);
 
-	if (!node || node->state == IN_BUSY_QUEUE ||
-	    node->state == IN_FREE_QUEUE) {
-		pr_err("memory not registered or Buffer already with us\n");
-		ret = -EINVAL;
+	if (!node) {
+		pr_err("memory not registered\n");
+		ret = -ENOENT;
 	} else {
-		list_add_tail(&node->active_entry, &wb->free_queue);
-		node->state = IN_FREE_QUEUE;
+		struct mdss_mdp_img_data *buf = &node->buf_data.p[0];
+
+		switch (node->state) {
+		case IN_FREE_QUEUE:
+			pr_err("node 0x%pa was already queueued before\n",
+					&buf->addr);
+			ret = -EINVAL;
+			break;
+		case IN_BUSY_QUEUE:
+			pr_err("node 0x%pa still in busy state\n", &buf->addr);
+			ret = -EBUSY;
+			break;
+		case WB_BUFFER_READY:
+			pr_debug("node 0x%pa re-queueded without dequeue\n",
+				&buf->addr);
+			list_del(&node->active_entry);
+		case WITH_CLIENT:
+		case REGISTERED:
+			list_add_tail(&node->active_entry, &wb->free_queue);
+			node->state = IN_FREE_QUEUE;
+			break;
+		default:
+			pr_err("Invalid node 0x%pa state %d\n",
+				&buf->addr, node->state);
+			ret = -EINVAL;
+			break;
+		}
 	}
 	mutex_unlock(&wb->lock);
 
@@ -497,6 +590,8 @@ int mdss_mdp_wb_kickoff(struct msm_fb_data_type *mfd)
 	if (!ctl->power_on)
 		return 0;
 
+	memset(&wb_args, 0, sizeof(wb_args));
+
 	mutex_lock(&mdss_mdp_wb_buf_lock);
 	if (wb) {
 		mutex_lock(&wb->lock);
@@ -537,6 +632,7 @@ int mdss_mdp_wb_kickoff(struct msm_fb_data_type *mfd)
 	if (wb && node) {
 		mutex_lock(&wb->lock);
 		list_add_tail(&node->active_entry, &wb->busy_queue);
+		node->state = WB_BUFFER_READY;
 		mutex_unlock(&wb->lock);
 		wake_up(&wb->wait_q);
 	}
@@ -798,3 +894,22 @@ int msm_fb_writeback_set_secure(struct fb_info *info, int enable)
 	return mdss_mdp_wb_set_secure(mfd, enable);
 }
 EXPORT_SYMBOL(msm_fb_writeback_set_secure);
+
+/**
+ * msm_fb_writeback_iommu_ref() - Power ON/OFF mdp clock
+ * @enable - true/false to Power ON/OFF mdp clock
+ *
+ * Call to enable mdp clock at start of mdp_mmap/mdp_munmap API and
+ * to disable mdp clock at end of these API's to ensure iommu is in
+ * proper state while driver map/un-map any buffers.
+ */
+int msm_fb_writeback_iommu_ref(struct fb_info *info, int enable)
+{
+	if (enable)
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+	else
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
+
+	return 0;
+}
+EXPORT_SYMBOL(msm_fb_writeback_iommu_ref);

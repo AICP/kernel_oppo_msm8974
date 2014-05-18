@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -19,7 +19,7 @@
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/leds.h>
-#include <linux/pwm.h>
+#include <linux/qpnp/pwm.h>
 #include <linux/err.h>
 
 #include "mdss_dsi.h"
@@ -245,29 +245,10 @@ static int set_cabc_resume_mode(int mode)
 
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
 {
-	int ret;
-
-	if (!gpio_is_valid(ctrl->pwm_pmic_gpio)) {
-		pr_err("%s: pwm_pmic_gpio=%d Invalid\n", __func__,
-				ctrl->pwm_pmic_gpio);
-		ctrl->pwm_pmic_gpio = -1;
-		return;
-	}
-
-	ret = gpio_request(ctrl->pwm_pmic_gpio, "disp_pwm");
-	if (ret) {
-		pr_err("%s: pwm_pmic_gpio=%d request failed\n", __func__,
-				ctrl->pwm_pmic_gpio);
-		ctrl->pwm_pmic_gpio = -1;
-		return;
-	}
-
 	ctrl->pwm_bl = pwm_request(ctrl->pwm_lpg_chan, "lcd-bklt");
 	if (ctrl->pwm_bl == NULL || IS_ERR(ctrl->pwm_bl)) {
-		pr_err("%s: lpg_chan=%d pwm request failed", __func__,
-				ctrl->pwm_lpg_chan);
-		gpio_free(ctrl->pwm_pmic_gpio);
-		ctrl->pwm_pmic_gpio = -1;
+		pr_err("%s: Error: lpg_chan=%d pwm request failed",
+				__func__, ctrl->pwm_lpg_chan);
 	}
 }
 
@@ -303,9 +284,9 @@ static void mdss_dsi_panel_bklt_pwm(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 		ctrl->pwm_enabled = 0;
 	}
 
-	ret = pwm_config(ctrl->pwm_bl, duty, ctrl->pwm_period);
+	ret = pwm_config_us(ctrl->pwm_bl, duty, ctrl->pwm_period);
 	if (ret) {
-		pr_err("%s: pwm_config() failed err=%d.\n", __func__, ret);
+		pr_err("%s: pwm_config_us() failed err=%d.\n", __func__, ret);
 		return;
 	}
 
@@ -358,6 +339,11 @@ static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 	cmdreq.cmds = pcmds->cmds;
 	cmdreq.cmds_cnt = pcmds->cmd_cnt;
 	cmdreq.flags = CMD_REQ_COMMIT;
+
+	/*Panel ON/Off commands should be sent in DSI Low Power Mode*/
+	if (pcmds->link_state == DSI_LP_MODE)
+		cmdreq.flags  |= CMD_REQ_LP_MODE;
+
 	cmdreq.rlen = 0;
 	cmdreq.cb = NULL;
 
@@ -900,7 +886,7 @@ static int mdss_dsi_parse_dcs_cmds(struct device_node *np,
 	}
 
 	data = of_get_property(np, link_key, NULL);
-	if (!strncmp(data, "dsi_hs_mode", 11))
+	if (data && !strcmp(data, "dsi_hs_mode"))
 		pcmds->link_state = DSI_HS_MODE;
 	else
 		pcmds->link_state = DSI_LP_MODE;
@@ -1136,18 +1122,23 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	pdest = of_get_property(np,
 		"qcom,mdss-dsi-panel-destination", NULL);
 
-	if (strlen(pdest) != 9) {
-		pr_err("%s: Unknown pdest specified\n", __func__);
+	if (pdest) {
+		if (strlen(pdest) != 9) {
+			pr_err("%s: Unknown pdest specified\n", __func__);
+			return -EINVAL;
+		}
+		if (!strcmp(pdest, "display_1"))
+			pinfo->pdest = DISPLAY_1;
+		else if (!strcmp(pdest, "display_2"))
+			pinfo->pdest = DISPLAY_2;
+		else {
+			pr_debug("%s: pdest not specified. Set Default\n",
+								__func__);
+			pinfo->pdest = DISPLAY_1;
+		}
+	} else {
+		pr_err("%s: pdest not specified\n", __func__);
 		return -EINVAL;
-	}
-	if (!strncmp(pdest, "display_1", 9))
-		pinfo->pdest = DISPLAY_1;
-	else if (!strncmp(pdest, "display_2", 9))
-		pinfo->pdest = DISPLAY_2;
-	else {
-		pr_debug("%s: pdest not specified. Set Default\n",
-							__func__);
-		pinfo->pdest = DISPLAY_1;
 	}
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-h-front-porch", &tmp);
 	pinfo->lcdc.h_front_porch = (!rc ? tmp : 6);
@@ -1203,6 +1194,8 @@ static int mdss_panel_parse_dt(struct device_node *np,
 			ctrl_pdata->bklt_ctrl = BL_DCS_CMD;
 		}
 	}
+	rc = of_property_read_u32(np, "qcom,mdss-brightness-max-level", &tmp);
+	pinfo->brightness_max = (!rc ? tmp : MDSS_MAX_BL_BRIGHTNESS);
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-bl-min-level", &tmp);
 	pinfo->bl_min = (!rc ? tmp : 0);
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-bl-max-level", &tmp);
@@ -1244,11 +1237,11 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	pinfo->mipi.insert_dcs_cmd =
 			(!rc ? tmp : 1);
 	rc = of_property_read_u32(np,
-		"qcom,mdss-dsi-te-v-sync-continue-lines", &tmp);
+		"qcom,mdss-dsi-wr-mem-continue", &tmp);
 	pinfo->mipi.wr_mem_continue =
 			(!rc ? tmp : 0x3c);
 	rc = of_property_read_u32(np,
-		"qcom,mdss-dsi-te-v-sync-rd-ptr-irq-line", &tmp);
+		"qcom,mdss-dsi-wr-mem-start", &tmp);
 	pinfo->mipi.wr_mem_start =
 			(!rc ? tmp : 0x2c);
 	rc = of_property_read_u32(np,
@@ -1258,7 +1251,7 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-virtual-channel-id", &tmp);
 	pinfo->mipi.vc = (!rc ? tmp : 0);
 	pinfo->mipi.rgb_swap = DSI_RGB_SWAP_RGB;
-	data = of_get_property(np, "mdss-dsi-color-order", NULL);
+	data = of_get_property(np, "qcom,mdss-dsi-color-order", NULL);
 	if (data) {
 		if (!strcmp(data, "rgb_swap_rbg"))
 			pinfo->mipi.rgb_swap = DSI_RGB_SWAP_RBG;

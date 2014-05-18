@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -217,6 +217,7 @@ struct dwc3_msm {
 	struct qpnp_adc_tm_chip *adc_tm_dev;
 	struct delayed_work	init_adc_work;
 	bool			id_adc_detect;
+	struct qpnp_vadc_chip	*vadc_dev;
 	u8			dcd_retries;
 	u32			bus_perf_client;
 	struct msm_bus_scale_pdata	*bus_scale_table;
@@ -1516,6 +1517,7 @@ static void dwc3_msm_notify_event(struct dwc3 *dwc, unsigned event)
 	case DWC3_CONTROLLER_ERROR_EVENT:
 		dev_info(mdwc->dev, "DWC3_CONTROLLER_ERROR_EVENT received\n");
 		dwc3_msm_dump_phy_info(mdwc);
+		dwc3_msm_write_reg(mdwc->base, DWC3_DEVTEN, 0);
 		/*
 		 * schedule work for doing block reset for recovery from erratic
 		 * error event.
@@ -1571,10 +1573,23 @@ static void dwc3_block_reset_usb_work(struct work_struct *w)
 {
 	struct dwc3_msm *mdwc = container_of(w, struct dwc3_msm,
 						usb_block_reset_work);
+	u32 reg;
 
 	dev_dbg(mdwc->dev, "%s\n", __func__);
 
 	dwc3_msm_block_reset(&mdwc->ext_xceiv, true);
+
+	reg = (DWC3_DEVTEN_EVNTOVERFLOWEN |
+			DWC3_DEVTEN_CMDCMPLTEN |
+			DWC3_DEVTEN_ERRTICERREN |
+			DWC3_DEVTEN_WKUPEVTEN |
+			DWC3_DEVTEN_ULSTCNGEN |
+			DWC3_DEVTEN_CONNECTDONEEN |
+			DWC3_DEVTEN_USBRSTEN |
+			DWC3_DEVTEN_DISCONNEVTEN);
+	dwc3_msm_write_reg(mdwc->base, DWC3_DEVTEN, reg);
+
+
 }
 
 static void dwc3_chg_enable_secondary_det(struct dwc3_msm *mdwc)
@@ -1794,6 +1809,11 @@ static void dwc3_start_chg_det(struct dwc3_charger *charger, bool start)
 		charger->chg_type = DWC3_INVALID_CHARGER;
 		return;
 	}
+
+	/* Skip if charger type was already detected externally */
+	if (mdwc->chg_state == USB_CHG_STATE_DETECTED &&
+		charger->chg_type != DWC3_INVALID_CHARGER)
+		return;
 
 	mdwc->chg_state = USB_CHG_STATE_UNDEFINED;
 	charger->chg_type = DWC3_INVALID_CHARGER;
@@ -2243,6 +2263,27 @@ static irqreturn_t msm_dwc3_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static int
+get_prop_usbin_voltage_now(struct dwc3_msm *mdwc)
+{
+	int rc = 0;
+	struct qpnp_vadc_result results;
+
+	if (IS_ERR_OR_NULL(mdwc->vadc_dev)) {
+		mdwc->vadc_dev = qpnp_get_vadc(mdwc->dev, "usbin");
+		if (IS_ERR(mdwc->vadc_dev))
+			return PTR_ERR(mdwc->vadc_dev);
+	}
+
+	rc = qpnp_vadc_read(mdwc->vadc_dev, USBIN, &results);
+	if (rc) {
+		pr_err("Unable to read usbin rc=%d\n", rc);
+		return 0;
+	} else {
+		return results.physical;
+	}
+}
+
 static int dwc3_msm_power_get_property_usb(struct power_supply *psy,
 				  enum power_supply_property psp,
 				  union power_supply_propval *val)
@@ -2274,6 +2315,9 @@ static int dwc3_msm_power_get_property_usb(struct power_supply *psy,
 		val->intval = mdwc->power_now;
 		break;
 #endif /*CONFIG_VENDOR_EDIT*/
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		val->intval = get_prop_usbin_voltage_now(mdwc);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -2392,6 +2436,7 @@ static enum power_supply_property dwc3_msm_pm_power_props_usb[] = {
 /* jingchun.wang@Onlinerd.Driver, 2013/12/30  Add for notify charge type */
 	POWER_SUPPLY_PROP_POWER_NOW,
 #endif /*CONFIG_VENDOR_EDIT*/
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 };
 
 static void dwc3_init_adc_work(struct work_struct *w);
@@ -2635,6 +2680,30 @@ dwc3_msm_ext_chg_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			complete(&mdwc->ext_chg_wait);
 			pm_runtime_put(mdwc->dev);
 		}
+		break;
+	case MSM_USB_EXT_CHG_VOLTAGE_INFO:
+		if (get_user(val, (int __user *)arg)) {
+			pr_err("%s: get_user failed\n\n", __func__);
+			ret = -EFAULT;
+			break;
+		}
+
+		if (val == USB_REQUEST_5V)
+			pr_debug("%s:voting 5V voltage request\n", __func__);
+		else if (val == USB_REQUEST_9V)
+			pr_debug("%s:voting 9V voltage request\n", __func__);
+		break;
+	case MSM_USB_EXT_CHG_RESULT:
+		if (get_user(val, (int __user *)arg)) {
+			pr_err("%s: get_user failed\n\n", __func__);
+			ret = -EFAULT;
+			break;
+		}
+
+		if (!val)
+			pr_debug("%s:voltage request successful\n", __func__);
+		else
+			pr_debug("%s:voltage request failed\n", __func__);
 		break;
 	default:
 		ret = -EINVAL;

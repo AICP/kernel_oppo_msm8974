@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -21,16 +21,12 @@
 
 #define MSM_VDEC_DVC_NAME "msm_vdec_8974"
 #define MIN_NUM_OUTPUT_BUFFERS 4
-#define MAX_NUM_OUTPUT_BUFFERS 6
-#define DEFAULT_CONCEAL_COLOR 0x0
+#define MAX_NUM_OUTPUT_BUFFERS VIDEO_MAX_FRAME
+#define DEFAULT_VIDEO_CONCEAL_COLOR_BLACK 0x8080
 
-#define TZ_INFO_GET_FEATURE_VERSION_ID 0x3
 #define TZ_DYNAMIC_BUFFER_FEATURE_ID 12
 #define TZ_FEATURE_VERSION(major, minor, patch) \
 	(((major & 0x3FF) << 22) | ((minor & 0x3FF) << 12) | (patch & 0xFFF))
-struct tz_get_feature_version {
-	u32 feature_id;
-};
 
 enum msm_vdec_ctrl_cluster {
 	MSM_VDEC_CTRL_CLUSTER_MAX = 1 << 0,
@@ -224,7 +220,7 @@ static struct msm_vidc_ctrl msm_vdec_ctrls[] = {
 		.name = "Extradata Type",
 		.type = V4L2_CTRL_TYPE_MENU,
 		.minimum = V4L2_MPEG_VIDC_EXTRADATA_NONE,
-		.maximum = V4L2_MPEG_VIDC_EXTRADATA_MPEG2_SEQDISP,
+		.maximum = V4L2_MPEG_VIDC_EXTRADATA_FRAME_BITS_INFO,
 		.default_value = V4L2_MPEG_VIDC_EXTRADATA_NONE,
 		.menu_skip_mask = ~(
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_NONE) |
@@ -245,7 +241,9 @@ static struct msm_vidc_ctrl msm_vdec_ctrls[] = {
 			(1 << V4L2_MPEG_VIDC_INDEX_EXTRADATA_INPUT_CROP) |
 			(1 << V4L2_MPEG_VIDC_INDEX_EXTRADATA_DIGITAL_ZOOM) |
 			(1 << V4L2_MPEG_VIDC_INDEX_EXTRADATA_ASPECT_RATIO) |
-			(1 << V4L2_MPEG_VIDC_EXTRADATA_MPEG2_SEQDISP)
+			(1 << V4L2_MPEG_VIDC_EXTRADATA_MPEG2_SEQDISP) |
+			(1 << V4L2_MPEG_VIDC_EXTRADATA_FRAME_QP) |
+			(1 << V4L2_MPEG_VIDC_EXTRADATA_FRAME_BITS_INFO)
 			),
 		.qmenu = mpeg_video_vidc_extradata,
 		.step = 0,
@@ -321,6 +319,16 @@ static struct msm_vidc_ctrl msm_vdec_ctrls[] = {
 		.menu_skip_mask = 0,
 		.step = 1,
 		.qmenu = NULL,
+		.cluster = 0,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_CONCEAL_COLOR,
+		.name = "Picture concealed color",
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = 0x0,
+		.maximum = 0xffffff,
+		.default_value = DEFAULT_VIDEO_CONCEAL_COLOR_BLACK,
+		.step = 1,
 		.cluster = 0,
 	},
 };
@@ -568,15 +576,7 @@ int msm_vdec_release_buf(struct msm_vidc_inst *inst,
 				core);
 		goto exit;
 	}
-	if (!inst->in_reconfig) {
-		rc = msm_comm_try_state(inst, MSM_VIDC_RELEASE_RESOURCES_DONE);
-		if (rc) {
-			dprintk(VIDC_ERR,
-				"Failed to move inst: %p to relase res done\n",
-				inst);
-			goto exit;
-		}
-	}
+
 	switch (b->type) {
 	case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
 		break;
@@ -971,11 +971,17 @@ int msm_vdec_s_fmt(struct msm_vidc_inst *inst, struct v4l2_format *f)
 			rc = -EINVAL;
 			goto err_invalid_fmt;
 		}
+		rc = msm_comm_try_state(inst, MSM_VIDC_CORE_INIT_DONE);
+		if (rc) {
+			dprintk(VIDC_ERR, "Failed to initialize instance\n");
+			goto err_invalid_fmt;
+		}
 		if (!(get_hal_codec_type(fmt->fourcc) &
 			inst->core->dec_codec_supported)) {
 			dprintk(VIDC_ERR,
-				"Codec(0x%x) not supported\n",
-				get_hal_codec_type(fmt->fourcc));
+				"Codec(0x%x) is not present in the supported codecs list(0x%x)\n",
+				get_hal_codec_type(fmt->fourcc),
+				inst->core->dec_codec_supported);
 			rc = -EINVAL;
 			goto err_invalid_fmt;
 		}
@@ -1319,7 +1325,6 @@ static int msm_vdec_start_streaming(struct vb2_queue *q, unsigned int count)
 {
 	struct msm_vidc_inst *inst;
 	int rc = 0;
-	int pdata = DEFAULT_CONCEAL_COLOR;
 	struct hfi_device *hdev;
 	if (!q || !q->drv_priv) {
 		dprintk(VIDC_ERR, "Invalid input, q = %p\n", q);
@@ -1337,10 +1342,6 @@ static int msm_vdec_start_streaming(struct vb2_queue *q, unsigned int count)
 	case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
 		if (inst->bufq[CAPTURE_PORT].vb2_bufq.streaming)
 			rc = start_streaming(inst);
-		rc = call_hfi_op(hdev, session_set_property,
-			(void *) inst->session,
-			HAL_PARAM_VDEC_CONCEAL_COLOR,
-			(void *) &pdata);
 		break;
 	case V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE:
 		if (inst->bufq[OUTPUT_PORT].vb2_bufq.streaming)
@@ -1410,7 +1411,19 @@ int msm_vdec_cmd(struct msm_vidc_inst *inst, struct v4l2_decoder_cmd *dec)
 	}
 	switch (dec->cmd) {
 	case V4L2_DEC_QCOM_CMD_FLUSH:
+		if (core->state != VIDC_CORE_INVALID &&
+			inst->state ==  MSM_VIDC_CORE_INVALID) {
+			rc = msm_comm_recover_from_session_error(inst);
+			if (rc)
+				dprintk(VIDC_ERR,
+					"Failed to recover from session_error: %d\n",
+					rc);
+		}
 		rc = msm_comm_flush(inst, dec->flags);
+		if (rc) {
+			dprintk(VIDC_ERR,
+					"Failed to flush buffers: %d\n", rc);
+		}
 		break;
 	case V4L2_DEC_CMD_STOP:
 		if (core->state != VIDC_CORE_INVALID &&
@@ -1512,17 +1525,16 @@ static inline enum buffer_mode_type get_buf_type(int val)
 static int check_tz_dynamic_buffer_support(void)
 {
 	int rc = 0;
-	struct tz_get_feature_version tz_feature_id;
-	unsigned int resp = 0;
+	int version = scm_get_feat_version(TZ_DYNAMIC_BUFFER_FEATURE_ID);
 
-	tz_feature_id.feature_id = TZ_DYNAMIC_BUFFER_FEATURE_ID;
-	rc = scm_call(SCM_SVC_INFO,
-		  TZ_INFO_GET_FEATURE_VERSION_ID, &tz_feature_id,
-		  sizeof(tz_feature_id), &resp, sizeof(resp));
-	if ((rc) || (resp != TZ_FEATURE_VERSION(1, 1, 0))) {
+	/*
+	 * if the version is < 1.1.0 then dynamic buffer allocation is
+	 * not supported
+	 */
+	if (version < TZ_FEATURE_VERSION(1, 1, 0)) {
 		dprintk(VIDC_DBG,
-			"Dyamic buffer mode not supported, failed to get tz feature version id : %u, rc : %d, response : %u\n",
-			tz_feature_id.feature_id, rc, resp);
+			"Dynamic buffer mode not supported, tz version is : %u vs required : %u\n",
+			version, TZ_FEATURE_VERSION(1, 1, 0));
 		rc = -ENOTSUPP;
 	}
 	return rc;
@@ -1731,6 +1743,11 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 			rc = -ENOTSUPP;
 			break;
 		}
+		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_CONCEAL_COLOR:
+		property_id = HAL_PARAM_VDEC_CONCEAL_COLOR;
+		property_val = ctrl->val;
+		pdata = &property_val;
 		break;
 	default:
 		break;

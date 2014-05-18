@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -19,6 +19,7 @@
 #include <linux/platform_device.h>
 #include <linux/gpio.h>
 #include <linux/iopoll.h>
+#include <linux/ratelimit.h>
 #include <media/msmb_isp.h>
 
 #include "msm_ispif.h"
@@ -200,7 +201,7 @@ static int msm_ispif_reset(struct ispif_device *ispif)
 			ispif->base + ISPIF_VFE_m_INTF_CMD_0(i));
 		msm_camera_io_w(ISPIF_STOP_INTF_IMMEDIATELY,
 			ispif->base + ISPIF_VFE_m_INTF_CMD_1(i));
-		pr_debug("%s: base %x", __func__, (unsigned int)ispif->base);
+		pr_debug("%s: base %lx", __func__, (unsigned long)ispif->base);
 		msm_camera_io_w(0, ispif->base +
 			ISPIF_VFE_m_PIX_INTF_n_CID_MASK(i, 0));
 		msm_camera_io_w(0, ispif->base +
@@ -1045,11 +1046,13 @@ static long msm_ispif_subdev_ioctl(struct v4l2_subdev *sd,
 	case MSM_SD_SHUTDOWN: {
 		struct ispif_device *ispif =
 			(struct ispif_device *)v4l2_get_subdevdata(sd);
-		msm_ispif_release(ispif);
+		if (ispif && ispif->base)
+			msm_ispif_release(ispif);
 		return 0;
 	}
 	default:
-		pr_err("%s: invalid cmd 0x%x received\n", __func__, cmd);
+		pr_err_ratelimited("%s: invalid cmd 0x%x received\n",
+			__func__, cmd);
 		return -ENOIOCTLCMD;
 	}
 }
@@ -1197,6 +1200,7 @@ error_sd_register:
 
 static const struct of_device_id msm_ispif_dt_match[] = {
 	{.compatible = "qcom,ispif"},
+	{}
 };
 
 MODULE_DEVICE_TABLE(of, msm_ispif_dt_match);

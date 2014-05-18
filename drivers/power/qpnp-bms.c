@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -407,6 +407,14 @@ static void disable_bms_irq(struct bms_irq *irq)
 	}
 }
 
+static void disable_bms_irq_nosync(struct bms_irq *irq)
+{
+	if (!__test_and_set_bit(0, &irq->disabled)) {
+		disable_irq_nosync(irq->irq);
+		pr_debug("disabled irq %d\n", irq->irq);
+	}
+}
+
 #define HOLD_OREG_DATA		BIT(0)
 static int lock_output_data(struct qpnp_bms_chip *chip)
 {
@@ -757,7 +765,20 @@ static int get_battery_status(struct qpnp_bms_chip *chip)
 
 static bool is_battery_charging(struct qpnp_bms_chip *chip)
 {
-	return get_battery_status(chip) == POWER_SUPPLY_STATUS_CHARGING;
+	union power_supply_propval ret = {0,};
+
+	if (chip->batt_psy == NULL)
+		chip->batt_psy = power_supply_get_by_name("battery");
+	if (chip->batt_psy) {
+		/* if battery has been registered, use the status property */
+		chip->batt_psy->get_property(chip->batt_psy,
+					POWER_SUPPLY_PROP_CHARGE_TYPE, &ret);
+		return ret.intval != POWER_SUPPLY_CHARGE_TYPE_NONE;
+	}
+
+	/* Default to false if the battery power supply is not registered. */
+	pr_debug("battery power supply is not registered\n");
+	return false;
 }
 
 static bool is_battery_full(struct qpnp_bms_chip *chip)
@@ -1897,7 +1918,7 @@ static int charging_adjustments(struct qpnp_bms_chip *chip,
 		if (batt_terminal_uv >= chip->max_voltage_uv - VDD_MAX_ERR) {
 			chip->soc_at_cv = soc;
 			chip->prev_chg_soc = soc;
-			chip->ibat_at_cv_ua = ibat_ua;
+			chip->ibat_at_cv_ua = params->iavg_ua;
 			pr_debug("CC_TO_CV ibat_ua = %d CHG SOC %d\n",
 					ibat_ua, soc);
 		} else {
@@ -1948,7 +1969,7 @@ static int charging_adjustments(struct qpnp_bms_chip *chip,
 	soc_ibat = bound_soc(linear_interpolate(chip->soc_at_cv,
 					chip->ibat_at_cv_ua,
 					100, -1 * chip->chg_term_ua,
-					ibat_ua));
+					params->iavg_ua));
 	weight_ibat = bound_soc(linear_interpolate(1, chip->soc_at_cv,
 					100, 100, chip->prev_chg_soc));
 	weight_cc = 100 - weight_ibat;
@@ -2496,7 +2517,7 @@ static int recalculate_raw_soc(struct qpnp_bms_chip *chip)
 		soc = calculate_soc_from_voltage(chip);
 	} else {
 		if (!chip->batfet_closed)
-			qpnp_iadc_calibrate_for_trim(chip->iadc_dev, true);
+			qpnp_iadc_calibrate_for_trim(chip->iadc_dev, false);
 		rc = qpnp_vadc_read(chip->vadc_dev, LR_MUX1_BATT_THERM,
 								&result);
 		if (rc) {
@@ -2548,7 +2569,7 @@ static int recalculate_soc(struct qpnp_bms_chip *chip)
 		soc = calculate_soc_from_voltage(chip);
 	} else {
 		if (!chip->batfet_closed)
-			qpnp_iadc_calibrate_for_trim(chip->iadc_dev, true);
+			qpnp_iadc_calibrate_for_trim(chip->iadc_dev, false);
 		rc = qpnp_vadc_read(chip->vadc_dev, LR_MUX1_BATT_THERM,
 								&result);
 		if (rc) {
@@ -3273,12 +3294,11 @@ static void batfet_status_check(struct qpnp_bms_chip *chip)
 {
 	bool batfet_closed;
 
-	if (chip->iadc_bms_revision2 > CALIB_WRKARND_DIG_MAJOR_MAX)
-		return;
-
 	batfet_closed = is_batfet_closed(chip);
 	if (chip->batfet_closed != batfet_closed) {
 		chip->batfet_closed = batfet_closed;
+		if (chip->iadc_bms_revision2 > CALIB_WRKARND_DIG_MAJOR_MAX)
+			return;
 		if (batfet_closed == false) {
 			/* batfet opened */
 			schedule_work(&chip->batfet_open_work);
@@ -3550,7 +3570,7 @@ static irqreturn_t bms_sw_cc_thr_irq_handler(int irq, void *_chip)
 	struct qpnp_bms_chip *chip = _chip;
 
 	pr_debug("sw_cc_thr irq triggered\n");
-	disable_bms_irq(&chip->sw_cc_thr_irq);
+	disable_bms_irq_nosync(&chip->sw_cc_thr_irq);
 	bms_stay_awake(&chip->soc_wake_source);
 	schedule_work(&chip->recalc_work);
 	return IRQ_HANDLED;
@@ -4273,6 +4293,12 @@ static int __devinit qpnp_bms_probe(struct spmi_device *spmi)
 		goto error_setup;
 	}
 
+	rc = bms_request_irqs(chip);
+	if (rc) {
+		pr_err("error requesting bms irqs, rc = %d\n", rc);
+		goto error_setup;
+	}
+
 	battery_insertion_check(chip);
 	batfet_status_check(chip);
 	battery_status_check(chip);
@@ -4303,12 +4329,6 @@ static int __devinit qpnp_bms_probe(struct spmi_device *spmi)
 	if (rc) {
 		pr_err("error reading vbat_sns adc channel = %d, rc = %d\n",
 						VBAT_SNS, rc);
-		goto unregister_dc;
-	}
-
-	rc = bms_request_irqs(chip);
-	if (rc) {
-		pr_err("error requesting bms irqs, rc = %d\n", rc);
 		goto unregister_dc;
 	}
 

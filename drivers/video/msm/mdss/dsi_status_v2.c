@@ -49,10 +49,10 @@ struct dsi_status_data {
 	struct msm_fb_data_type *mfd;
 	uint32_t check_interval;
 };
-static struct dsi_status_data *pstatus_data;
+struct dsi_status_data *pstatus_data;
 static uint32_t interval = STATUS_CHECK_INTERVAL;
 
-static void check_dsi_ctrl_status(struct work_struct *work)
+void check_dsi_ctrl_status(struct work_struct *work)
 {
 	struct dsi_status_data *pdsi_status = NULL;
 	struct mdss_panel_data *pdata = NULL;
@@ -140,7 +140,7 @@ int __init mdss_dsi_status_init(void)
 {
 	int rc;
 
-	pstatus_data = kzalloc(sizeof(struct dsi_status_data), GFP_KERNEL);
+	pstatus_data = kzalloc(sizeof(struct dsi_status_data),	GFP_KERNEL);
 	if (!pstatus_data) {
 		pr_err("%s: can't alloc mem\n", __func__);
 		rc = -ENOMEM;

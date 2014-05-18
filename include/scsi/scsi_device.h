@@ -156,7 +156,10 @@ struct scsi_device {
 	unsigned try_rc_10_first:1;	/* Try READ_CAPACACITY_10 first */
 #endif /* VENDOR_EDIT */
 	unsigned is_visible:1;	/* is the device visible in sysfs */
+	unsigned use_rpm_auto:1; /* Enable runtime PM auto suspend */
 
+#define SCSI_DEFAULT_AUTOSUSPEND_DELAY  -1
+	int autosuspend_delay;
 	DECLARE_BITMAP(supported_events, SDEV_EVT_MAXBITS); /* supported events */
 	struct list_head event_list;	/* asserted events */
 	struct work_struct event_work;

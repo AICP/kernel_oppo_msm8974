@@ -1,7 +1,7 @@
 /* include/linux/msm_mdp.h
  *
  * Copyright (C) 2007 Google Incorporated
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -169,7 +169,7 @@ enum {
 #define MDP_BLUR 0x10
 #define MDP_BLEND_FG_PREMULT 0x20000
 #define MDP_IS_FG 0x40000
-#define MDP_SOLID_FILL 0x0000100
+#define MDP_SOLID_FILL 0x00000020
 #define MDP_DEINTERLACE 0x80000000
 #define MDP_SHARPENING  0x40000000
 #define MDP_NO_DMA_BARRIER_START	0x20000000
@@ -320,6 +320,27 @@ struct msmfb_writeback_data {
 #define MDP_PP_IGC_FLAG_ROM0	0x10
 #define MDP_PP_IGC_FLAG_ROM1	0x20
 
+#define MDP_PP_PA_HUE_ENABLE		0x10
+#define MDP_PP_PA_SAT_ENABLE		0x20
+#define MDP_PP_PA_VAL_ENABLE		0x40
+#define MDP_PP_PA_CONT_ENABLE		0x80
+#define MDP_PP_PA_SIX_ZONE_ENABLE	0x100
+#define MDP_PP_PA_SKIN_ENABLE		0x200
+#define MDP_PP_PA_SKY_ENABLE		0x400
+#define MDP_PP_PA_FOL_ENABLE		0x800
+#define MDP_PP_PA_HUE_MASK		0x1000
+#define MDP_PP_PA_SAT_MASK		0x2000
+#define MDP_PP_PA_VAL_MASK		0x4000
+#define MDP_PP_PA_CONT_MASK		0x8000
+#define MDP_PP_PA_SIX_ZONE_HUE_MASK	0x10000
+#define MDP_PP_PA_SIX_ZONE_SAT_MASK	0x20000
+#define MDP_PP_PA_SIX_ZONE_VAL_MASK	0x40000
+#define MDP_PP_PA_MEM_COL_SKIN_MASK	0x80000
+#define MDP_PP_PA_MEM_COL_SKY_MASK	0x100000
+#define MDP_PP_PA_MEM_COL_FOL_MASK	0x200000
+#define MDP_PP_PA_MEM_PROTECT_EN	0x400000
+#define MDP_PP_PA_SAT_ZERO_EXP_EN	0x800000
+
 #define MDSS_PP_DSPP_CFG	0x000
 #define MDSS_PP_SSPP_CFG	0x100
 #define MDSS_PP_LM_CFG	0x200
@@ -364,6 +385,7 @@ struct mdp_qseed_cfg_data {
 #define MDP_OVERLAY_PP_SHARP_CFG       0x10
 #define MDP_OVERLAY_PP_HIST_CFG        0x20
 #define MDP_OVERLAY_PP_HIST_LUT_CFG    0x40
+#define MDP_OVERLAY_PP_PA_V2_CFG       0x80
 
 #define MDP_CSC_FLAG_ENABLE	0x1
 #define MDP_CSC_FLAG_YUV_IN	0x2
@@ -390,6 +412,32 @@ struct mdp_pa_cfg {
 	uint32_t sat_adj;
 	uint32_t val_adj;
 	uint32_t cont_adj;
+};
+
+struct mdp_pa_mem_col_cfg {
+	uint32_t color_adjust_p0;
+	uint32_t color_adjust_p1;
+	uint32_t hue_region;
+	uint32_t sat_region;
+	uint32_t val_region;
+};
+
+#define MDP_SIX_ZONE_LUT_SIZE		384
+
+struct mdp_pa_v2_data {
+	/* Mask bits for PA features */
+	uint32_t flags;
+	uint32_t global_hue_adj;
+	uint32_t global_sat_adj;
+	uint32_t global_val_adj;
+	uint32_t global_cont_adj;
+	struct mdp_pa_mem_col_cfg skin_cfg;
+	struct mdp_pa_mem_col_cfg sky_cfg;
+	struct mdp_pa_mem_col_cfg fol_cfg;
+	uint32_t six_zone_len;
+	uint32_t six_zone_thresh;
+	uint32_t *six_zone_curve_p0;
+	uint32_t *six_zone_curve_p1;
 };
 
 struct mdp_igc_lut_data {
@@ -419,6 +467,7 @@ struct mdp_overlay_pp_params {
 	struct mdp_csc_cfg csc_cfg;
 	struct mdp_qseed_cfg qseed_cfg[2];
 	struct mdp_pa_cfg pa_cfg;
+	struct mdp_pa_v2_data pa_v2_cfg;
 	struct mdp_igc_lut_data igc_cfg;
 	struct mdp_sharp_cfg sharp_cfg;
 	struct mdp_histogram_cfg hist_cfg;
@@ -565,19 +614,21 @@ struct mdp_histogram {
 	uint32_t *b;
 };
 
+#define MISR_CRC_BATCH_SIZE 32
 enum {
-	DISPLAY_MISR_EDP,
+	DISPLAY_MISR_EDP = 0,
 	DISPLAY_MISR_DSI0,
 	DISPLAY_MISR_DSI1,
 	DISPLAY_MISR_HDMI,
 	DISPLAY_MISR_LCDC,
+	DISPLAY_MISR_MDP,
 	DISPLAY_MISR_ATV,
 	DISPLAY_MISR_DSI_CMD,
 	DISPLAY_MISR_MAX
 };
 
 enum {
-	MISR_OP_NONE,
+	MISR_OP_NONE = 0,
 	MISR_OP_SFM,
 	MISR_OP_MFM,
 	MISR_OP_BM,
@@ -588,7 +639,7 @@ struct mdp_misr {
 	uint32_t block_id;
 	uint32_t frame_count;
 	uint32_t crc_op_mode;
-	uint32_t crc_value[32];
+	uint32_t crc_value[MISR_CRC_BATCH_SIZE];
 };
 
 /*
@@ -704,6 +755,11 @@ struct mdp_pa_cfg_data {
 	struct mdp_pa_cfg pa_data;
 };
 
+struct mdp_pa_v2_cfg_data {
+	uint32_t block;
+	struct mdp_pa_v2_data pa_v2_data;
+};
+
 struct mdp_dither_cfg_data {
 	uint32_t block;
 	uint32_t flags;
@@ -745,10 +801,16 @@ enum {
 	DCM_ENTER,
 	DCM_EXIT,
 	DCM_BLANK,
+	DTM_ENTER,
+	DTM_EXIT,
 };
 
+#define MDSS_PP_SPLIT_LEFT_ONLY		0x10000000
+#define MDSS_PP_SPLIT_RIGHT_ONLY	0x20000000
+#define MDSS_PP_SPLIT_MASK		0x30000000
+
 #define MDSS_MAX_BL_BRIGHTNESS 255
-#define AD_BL_LIN_LEN (MDSS_MAX_BL_BRIGHTNESS + 1)
+#define AD_BL_LIN_LEN 256
 
 #define MDSS_AD_MODE_AUTO_BL	0x0
 #define MDSS_AD_MODE_AUTO_STR	0x1
@@ -832,6 +894,7 @@ enum {
 	mdp_op_qseed_cfg,
 	mdp_bl_scale_cfg,
 	mdp_op_pa_cfg,
+	mdp_op_pa_v2_cfg,
 	mdp_op_dither_cfg,
 	mdp_op_gamut_cfg,
 	mdp_op_calib_cfg,
@@ -863,6 +926,7 @@ struct msmfb_mdp_pp {
 		struct mdp_qseed_cfg_data qseed_cfg_data;
 		struct mdp_bl_scale_data bl_scale_data;
 		struct mdp_pa_cfg_data pa_cfg_data;
+		struct mdp_pa_v2_cfg_data pa_v2_cfg_data;
 		struct mdp_dither_cfg_data dither_cfg_data;
 		struct mdp_gamut_cfg_data gamut_cfg_data;
 		struct mdp_calib_config_data calib_cfg;
@@ -881,6 +945,7 @@ enum {
 	metadata_op_frame_rate,
 	metadata_op_vic,
 	metadata_op_wb_format,
+	metadata_op_wb_secure,
 	metadata_op_get_caps,
 	metadata_op_crc,
 	metadata_op_max
@@ -913,11 +978,13 @@ struct msmfb_metadata {
 		uint32_t panel_frame_rate;
 		uint32_t video_info_code;
 		struct mdss_hw_caps caps;
+		uint8_t secure_en;
 	} data;
 };
 
 #define MDP_MAX_FENCE_FD	32
 #define MDP_BUF_SYNC_FLAG_WAIT	1
+#define MDP_BUF_SYNC_FLAG_RETIRE_FENCE	0x10
 
 struct mdp_buf_sync {
 	uint32_t flags;
@@ -925,6 +992,7 @@ struct mdp_buf_sync {
 	uint32_t session_id;
 	int *acq_fen_fd;
 	int *rel_fen_fd;
+	int *retire_fen_fd;
 };
 
 struct mdp_async_blit_req_list {
@@ -934,19 +1002,11 @@ struct mdp_async_blit_req_list {
 };
 
 #define MDP_DISPLAY_COMMIT_OVERLAY	1
-struct mdp_buf_fence {
-	uint32_t flags;
-	uint32_t acq_fen_fd_cnt;
-	int acq_fen_fd[MDP_MAX_FENCE_FD];
-	int rel_fen_fd[MDP_MAX_FENCE_FD];
-};
-
 
 struct mdp_display_commit {
 	uint32_t flags;
 	uint32_t wait_for_finish;
 	struct fb_var_screeninfo var;
-	struct mdp_buf_fence buf_fence;
 	struct mdp_rect roi;
 };
 
@@ -1003,6 +1063,7 @@ int msm_fb_writeback_dequeue_buffer(struct fb_info *info,
 int msm_fb_writeback_stop(struct fb_info *info);
 int msm_fb_writeback_terminate(struct fb_info *info);
 int msm_fb_writeback_set_secure(struct fb_info *info, int enable);
+int msm_fb_writeback_iommu_ref(struct fb_info *info, int enable);
 #endif
 
 #endif /*_MSM_MDP_H_*/

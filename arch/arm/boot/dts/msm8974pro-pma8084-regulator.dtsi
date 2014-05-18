@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -267,7 +267,7 @@
 	rpm-regulator-ldoa11 {
 		status = "okay";
 		pma8084_l11: regulator-l11 {
-			regulator-min-microvolt = <1300000>;
+			regulator-min-microvolt = <1225000>;
 			regulator-max-microvolt = <1300000>;
 			qcom,init-voltage = <1300000>;
 			status = "okay";
@@ -494,10 +494,7 @@
 			qcom,retention-voltage = <675000>;
 			qcom,ldo-default-voltage = <750000>;
 			qcom,ldo-threshold-voltage = <850000>;
-/*VENDOR_EDIT*/
-/* OPPO 2014-01-16 liushu modified begin for bug 397791 */
-		  qcom,ldo-delta-voltage = <12500>;
-/* OPPO 2014-01-16 liushu modified end for bug 397791 */
+			qcom,ldo-delta-voltage = <12500>;
 			qcom,cpu-num = <0>;
 		};
 
@@ -513,10 +510,7 @@
 			qcom,retention-voltage = <675000>;
 			qcom,ldo-default-voltage = <750000>;
 			qcom,ldo-threshold-voltage = <850000>;
-/*VENDOR_EDIT*/
-/* OPPO 2014-01-16 liushu modified begin for bug 397791 */
-		  qcom,ldo-delta-voltage = <12500>;
-/* OPPO 2014-01-16 liushu modified end for bug 397791 */
+			qcom,ldo-delta-voltage = <12500>;
 			qcom,cpu-num = <1>;
 		};
 
@@ -532,10 +526,7 @@
 			qcom,retention-voltage = <675000>;
 			qcom,ldo-default-voltage = <750000>;
 			qcom,ldo-threshold-voltage = <850000>;
-/*VENDOR_EDIT*/
-/* OPPO 2014-01-16 liushu modified begin for bug 397791 */
-		  qcom,ldo-delta-voltage = <12500>;
-/* OPPO 2014-01-16 liushu modified end for bug 397791 */
+			qcom,ldo-delta-voltage = <12500>;
 			qcom,cpu-num = <2>;
 		};
 
@@ -551,10 +542,7 @@
 			qcom,retention-voltage = <675000>;
 			qcom,ldo-default-voltage = <750000>;
 			qcom,ldo-threshold-voltage = <850000>;
-/*VENDOR_EDIT*/
-/* OPPO 2014-01-16 liushu modified begin for bug 397791 */
-		  qcom,ldo-delta-voltage = <12500>;
-/* OPPO 2014-01-16 liushu modified end for bug 397791 */
+			qcom,ldo-delta-voltage = <12500>;
 			qcom,cpu-num = <3>;
 		};
 	};
