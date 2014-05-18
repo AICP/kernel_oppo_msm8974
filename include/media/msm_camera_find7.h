@@ -10,11 +10,6 @@
  * GNU General Public License for more details.
  *
  */
-
-#ifdef CONFIG_OPPO_DEVICE_FIND7
-#include <media/msm_camera_find7.h>
-#else
-
 #ifndef __LINUX_MSM_CAMERA_H
 #define __LINUX_MSM_CAMERA_H
 
@@ -2287,4 +2282,3 @@ struct msm_ver_num_info {
 	(handle |= (0x1 << 7) | (data & 0x7F))
 
 #endif /* __LINUX_MSM_CAMERA_H */
-#endif /* CONFIG_OPPO_DEVICE_FIND7 */
