@@ -11,10 +11,6 @@
  *
  */
 
-#ifdef CONFIG_OPPO_DEVICE_FIND7
-#include <mach/camera2_find7.h>
-#else
-
 #ifndef __CAMERA2_H__
 #define __CAMERA2_H__
 
@@ -144,4 +140,3 @@ struct msm_eeprom_board_info {
 };
 
 #endif
-#endif /* CONFIG_OPPO_DEVICE_FIND7 */

@@ -1,7 +1,3 @@
-#ifdef CONFIG_OPPO_DEVICE_FIND7
-#include <media/msm_cam_sensor_find7.h>
-#else
-
 #ifndef __LINUX_MSM_CAM_SENSOR_H
 #define __LINUX_MSM_CAM_SENSOR_H
 
@@ -52,6 +48,11 @@
 
 #define MAX_AF_ITERATIONS 3
 #define MAX_NUMBER_OF_STEPS 47
+
+typedef enum sensor_stats_type {
+	YRGB,
+	YYYY,
+} sensor_stats_type_t;
 
 enum flash_type {
 	LED_FLASH = 1,
@@ -447,6 +448,7 @@ enum msm_actuator_cfg_type_t {
 	CFG_SET_DEFAULT_FOCUS,
 	CFG_SET_POSITION,
 	CFG_MOVE_FOCUS,
+	CFG_ACTUATOR_POWERDOWN,
 };
 
 enum actuator_type {
@@ -488,6 +490,7 @@ struct msm_actuator_move_params_t {
 	int8_t sign_dir;
 	int16_t dest_step_pos;
 	int32_t num_steps;
+	uint16_t curr_lens_pos;
 	struct damping_params_t *ringing_params;
 };
 
@@ -618,4 +621,3 @@ struct msm_camera_led_cfg_t {
 #define MSM_V4L2_PIX_FMT_META v4l2_fourcc('M', 'E', 'T', 'A') /* META */
 
 #endif /* __LINUX_MSM_CAM_SENSOR_H */
-#endif /* CONFIG_OPPO_DEVICE_FIND7 */

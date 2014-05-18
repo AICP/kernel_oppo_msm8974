@@ -1,7 +1,3 @@
-#ifdef CONFIG_OPPO_DEVICE_FIND7
-#include <media/msmb_generic_buf_mgr_find7.h>
-#else
-
 #ifndef __MEDIA_MSMB_BUF_MNGR_H__
 #define __MEDIA_MSMB_BUF_MNGR_H__
 
@@ -24,5 +20,10 @@ struct v4l2_subdev *msm_buf_mngr_get_subdev(void);
 #define VIDIOC_MSM_BUF_MNGR_BUF_DONE \
 	_IOWR('V', BASE_VIDIOC_PRIVATE + 35, struct msm_buf_mngr_info)
 
+#define VIDIOC_MSM_BUF_MNGR_INIT \
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 36, struct msm_buf_mngr_info)
+
+#define VIDIOC_MSM_BUF_MNGR_DEINIT \
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 37, struct msm_buf_mngr_info)
+
 #endif
-#endif /* CONFIG_OPPO_DEVICE_FIND7 */
