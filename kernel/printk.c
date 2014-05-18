@@ -991,10 +991,16 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 
 				t = cpu_clock(printk_cpu);
 				nanosec_rem = do_div(t, 1000000000);
+				//peirs modify for debug msm_ipc_router problem, 2013.09.23, begin:
+				/*
 				tlen = sprintf(tbuf, "[%5lu.%06lu] ",
 						(unsigned long) t,
 						nanosec_rem / 1000);
-
+				*/
+				tlen = sprintf(tbuf, "[%5lu.%06lu][%4d,%-20s]",
+						(unsigned long) t,
+						nanosec_rem / 1000, (int)current->pid, current->comm);
+				//end.
 				for (tp = tbuf; tp < tbuf + tlen; tp++)
 					emit_log_char(*tp);
 				printed_len += tlen;
@@ -1013,7 +1019,7 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	 * Try to acquire and then immediately release the
 	 * console semaphore. The release will do all the
 	 * actual magic (print out buffers, wake up klogd,
-	 * etc). 
+	 * etc).
 	 *
 	 * The console_trylock_for_printk() function
 	 * will release 'logbuf_lock' regardless of whether it

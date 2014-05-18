@@ -1,5 +1,5 @@
 /*
- * drivers/power/process.c - Functions for starting/stopping processes on 
+ * drivers/power/process.c - Functions for starting/stopping processes on
  *                           suspend transitions.
  *
  * Originally from swsusp.
@@ -20,7 +20,7 @@
 #include <linux/wakelock.h>
 #include "power.h"
 
-/* 
+/*
  * Timeout for stopping processes
  */
 #define TIMEOUT	(20 * HZ)
@@ -101,6 +101,10 @@ static int try_to_freeze_tasks(bool user_only)
 			printk("\n");
 			printk(KERN_ERR "Freezing of %s aborted\n",
 					user_only ? "user space " : "tasks ");
+#ifdef VENDOR_EDIT
+//Shu.Liu@OnlineRd.Driver, 2014/02/24, modified for sleep debug
+			print_active_wakeup_sources();
+#endif /* VENDOR_EDIT */
 		}
 		else {
 			printk("\n");
