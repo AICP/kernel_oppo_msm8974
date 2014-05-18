@@ -149,6 +149,8 @@ static struct wcd9xxx_mbhc_config mbhc_cfg = {
 			    1 << MBHC_CS_ENABLE_DET_ANC),
 	.do_recalibration = true,
 	.use_vddio_meas = true,
+	.enable_anc_mic_detect = false,
+	.hw_jack_type = SIX_POLE_JACK,
 /* OPPO 2013-10-22 liuyan Modify end */
 #ifdef CONFIG_VENDOR_EDIT  //liuyan add 2013-4-18
        .hpmic_switch_gpio=0,
@@ -156,9 +158,6 @@ static struct wcd9xxx_mbhc_config mbhc_cfg = {
 	.yda145_ctr_gpio=0,
 	.yda145_boost_gpio=0,
        .count_regulator=0,
-#else
-	.enable_anc_mic_detect = false,
-	.hw_jack_type = SIX_POLE_JACK,
 #endif
 };
 

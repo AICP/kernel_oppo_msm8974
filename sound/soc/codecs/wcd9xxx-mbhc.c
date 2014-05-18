@@ -2649,14 +2649,14 @@ static void wcd9xxx_mbhc_decide_swch_plug(struct wcd9xxx_mbhc *mbhc)
 		      (1 << MBHC_CS_ENABLE_INSERTION)) != 0) &&
 		     (!(snd_soc_read(mbhc->codec,
 				     mbhc->mbhc_bias_regs.ctl_reg) & 0x80)));
-	//liuyan 2014-1-2 modify for delay detect headset
-	#ifdef CONFIG_VENDOR_EDIT
-       plug_type=PLUG_TYPE_INVALID;
-	#else
-/*
 
 	mbhc->scaling_mux_in = 0x04;
 
+	//liuyan 2014-1-2 modify for delay detect headset
+#ifdef CONFIG_VENDOR_EDIT
+	plug_type=PLUG_TYPE_INVALID;
+#else
+/*
 	if (current_source_enable) {
 		wcd9xxx_turn_onoff_current_source(mbhc, &mbhc->mbhc_bias_regs,
 						  true, false);
@@ -2669,7 +2669,7 @@ static void wcd9xxx_mbhc_decide_swch_plug(struct wcd9xxx_mbhc *mbhc)
 		wcd9xxx_turn_onoff_override(mbhc, false);
 	}
 */
-      #endif
+#endif
        //liuyan modify end
 	if (wcd9xxx_swch_level_remove(mbhc)) {
 		pr_debug("%s: Switch level is low when determining plug\n",
