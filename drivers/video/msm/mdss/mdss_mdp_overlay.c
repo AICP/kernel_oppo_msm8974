@@ -321,8 +321,6 @@ static int __mdss_mdp_overlay_setup_scaling(struct mdss_mdp_pipe *pipe)
 	return rc;
 }
 
-#ifndef CONFIG_VENDOR_EDIT
-/* Xinqin.Yang@PhoneSW.Driver, 2014/01/07  Delete for delete scale patch */
 static inline void __mdss_mdp_overlay_set_chroma_sample(
 	struct mdss_mdp_pipe *pipe)
 {
@@ -345,7 +343,6 @@ static inline void __mdss_mdp_overlay_set_chroma_sample(
 	if (pipe->vert_deci)
 		pipe->chroma_sample_v = 0;
 }
-#endif /*CONFIG_VENDOR_EDIT*/
 
 static int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 				       struct mdp_overlay *req,
@@ -490,15 +487,9 @@ static int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 	pipe->horz_deci = req->horz_deci;
 	pipe->vert_deci = req->vert_deci;
 
-#ifndef CONFIG_VENDOR_EDIT
-/* Xinqin.Yang@PhoneSW.Driver, 2014/01/07  Delete for delete scale patch */
 	memcpy(&pipe->scale, &req->scale, sizeof(struct mdp_scale_data));
-#endif /*CONFIG_VENDOR_EDIT*/
 	pipe->src_fmt = fmt;
-#ifndef CONFIG_VENDOR_EDIT
-/* Xinqin.Yang@PhoneSW.Driver, 2014/01/07  Delete for delete scale patch */
 	__mdss_mdp_overlay_set_chroma_sample(pipe);
-#endif /*CONFIG_VENDOR_EDIT*/
 
 	pipe->mixer_stage = req->z_order;
 	pipe->is_fg = req->is_fg;
@@ -514,13 +505,8 @@ static int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 		pr_debug("Unintended blend_op %d on layer with no alpha plane\n",
 			pipe->blend_op);
 
-#ifndef CONFIG_VENDOR_EDIT
-/* Xinqin.Yang@PhoneSW.Driver, 2014/01/07  Modify for delete scale patch */
 	if (fmt->is_yuv && !(pipe->flags & MDP_SOURCE_ROTATED_90) &&
 			!pipe->scale.enable_pxl_ext) {
-#else /*CONFIG_VENDOR_EDIT*/
-	if (fmt->is_yuv && !(pipe->flags & MDP_SOURCE_ROTATED_90)) {
-#endif /*CONFIG_VENDOR_EDIT*/
 		pipe->overfetch_disable = OVERFETCH_DISABLE_BOTTOM;
 
 		if (!(pipe->flags & MDSS_MDP_DUAL_PIPE) ||
@@ -586,12 +572,7 @@ static int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 		}
 	}
 
-#ifndef CONFIG_VENDOR_EDIT
-/* Xinqin.Yang@PhoneSW.Driver, 2014/01/07  Modify for delete scale patch */
 	if ((pipe->flags & MDP_DEINTERLACE) && !pipe->scale.enable_pxl_ext) {
-#else /*CONFIG_VENDOR_EDIT*/
-	if (pipe->flags & MDP_DEINTERLACE) {
-#endif /*CONFIG_VENDOR_EDIT*/
 		if (pipe->flags & MDP_SOURCE_ROTATED_90) {
 			pipe->src.x = DIV_ROUND_UP(pipe->src.x, 2);
 			pipe->src.x &= ~1;

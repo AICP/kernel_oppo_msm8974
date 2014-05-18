@@ -285,7 +285,7 @@ static void mdss_fb_parse_dt(struct msm_fb_data_type *mfd)
 	if (of_property_read_u32_array(pdev->dev.of_node, "qcom,mdss-fb-split",
 				       data, 2))
 		return;
-    if (data[0] && data[1] &&
+	if (data[0] && data[1] &&
 	    (mfd->panel_info->xres == (data[0] + data[1]))) {
 		mfd->split_fb_left = data[0];
 		mfd->split_fb_right = data[1];

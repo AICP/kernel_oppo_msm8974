@@ -69,11 +69,11 @@
 #define STATUS_REL_DETECTION 0x0C
 
 #define HS_DETECT_PLUG_TIME_MS (5 * 1000)
+#define ANC_HPH_DETECT_PLUG_TIME_MS (5 * 1000)
 //liuyan 2013-1-2 for delay detect headset
 #ifdef CONFIG_VENDOR_EDIT
 #define HS_DETECT_PLUG_INERVAL_MS 500
 #else
-#define ANC_HPH_DETECT_PLUG_TIME_MS (5 * 1000)
 #define HS_DETECT_PLUG_INERVAL_MS 100
 #endif
 //liuyan modify end
@@ -1872,7 +1872,7 @@ static int wcd9xxx_cs_get_vdec_value(struct wcd9xxx_mbhc *mbhc,
 	dt[0].vddio = false;
 	dt[0].hwvalue = true;
 	dt[0].hphl_status = wcd9xxx_hphl_status(mbhc);
-	dt[0].dce = wcd9xxx_mbhc_setup_hs_polling(mbhc, true);
+	dt[0].dce = wcd9xxx_mbhc_setup_hs_polling(mbhc, &mbhc->mbhc_bias_regs, true);
 	dt[0].mic_bias = false;
 
 	for (i = 1; i < NUM_DCE_PLUG_INS_DETECT - 1; i++) {
@@ -1884,11 +1884,11 @@ static int wcd9xxx_cs_get_vdec_value(struct wcd9xxx_mbhc *mbhc,
 			wcd9xxx_codec_hphr_gnd_switch(codec, true);
 
 		if (dt[i].mic_bias)
-			wcd9xxx_turn_onoff_current_source(mbhc, false, false);
+			wcd9xxx_turn_onoff_current_source(mbhc, &mbhc->mbhc_bias_regs, false, false);
 
 		dt[i].dce = __wcd9xxx_codec_sta_dce(mbhc, 1, !highhph, true);
 		if (dt[i].mic_bias)
-			wcd9xxx_turn_onoff_current_source(mbhc, true, false);
+			wcd9xxx_turn_onoff_current_source(mbhc,&mbhc->mbhc_bias_regs,  true, false);
 		if (dt[i].swap_gnd)
 			wcd9xxx_codec_hphr_gnd_switch(codec, false);
 	}

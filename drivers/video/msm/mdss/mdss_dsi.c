@@ -516,31 +516,6 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 
 	if (pdata->panel_info.type == MIPI_CMD_PANEL)
 		mdss_dsi_clk_ctrl(ctrl_pdata, 0);
-#ifdef CONFIG_VENDOR_EDIT
-#if 0
-	mdss_dsi_op_mode_config(mipi->mode, pdata);
-#endif
-//yanghai test
-#if 0
-	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x15c, 0x31);
-	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x19c, 0x100);
-	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x1a4, 0x05);
-	msleep(20);
-	mdss_dsi_op_mode_config(mipi->mode, pdata);
-	msleep(20);
-	pr_err("%s-:\n", __func__);
-//	while (1);
-	msleep(10000);
-#endif
-#if 0
-for(i=1;i<=359;i++)
-	{
-		tmp = MIPI_INP((ctrl_pdata->ctrl_base) + 0x4*i);
-		pr_err("reg 0x%x==0x%x:\n",0x04*i, tmp);
-		}
-#endif
-//yanghai test end
-#endif
 	pr_debug("%s-:\n", __func__);
 	return 0;
 }
@@ -582,11 +557,7 @@ static int mdss_dsi_unblank(struct mdss_panel_data *pdata)
 				mdss_dsi_set_tear_on(ctrl_pdata);
 		}
 	}
-/* OPPO 2013-10-18 yxq added begin for debug */
-#ifdef VENDOR_EDIT
-//mmss_dump_j();
-#endif
-/* OPPO 2013-10-18 yxq added end */
+
 	pr_debug("%s-:\n", __func__);
 
 	return ret;
@@ -1004,11 +975,11 @@ static struct device_node *mdss_dsi_find_panel_of_node(
 	char *stream = NULL, *pan = NULL;
 	struct device_node *dsi_pan_node = NULL, *mdss_node = NULL;
 
-	l = strlen(panel_cfg);
+	len = strlen(panel_cfg);
 #ifdef CONFIG_VENDOR_EDIT
 /* Xinqin.Yang@PhoneSW.Driver, 2014/02/10  Add for Find7s */
     if (get_pcb_version() >= HW_VERSION__20) {
-        l = 0;
+        len = 0;
     }
 #endif /*CONFIG_VENDOR_EDIT*/
 	if (!len) {
