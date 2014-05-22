@@ -2009,7 +2009,7 @@ static unsigned char synaptics_rmi4_update_gesture2(unsigned char *gesture,unsig
 	switch(gesture[0]) {
 	case SYNA_ONE_FINGER_CIRCLE:
 		gesturemode = Circle ;
-        keyvalue = KEY_F4;
+        keyvalue = KEY_GESTURE_CIRCLE;
 		break ;
 
 	case SYNA_TWO_FINGER_SWIPE:
@@ -2029,33 +2029,33 @@ static unsigned char synaptics_rmi4_update_gesture2(unsigned char *gesture,unsig
 		}
 
 		if(gesturemode!=UnkownGestrue)	{
-            keyvalue = KEY_F6;
+            keyvalue = KEY_GESTURE_SWIPE_DOWN;
 		}
 
 		break ;
 
 	case SYNA_ONE_FINGER_DOUBLE_TAP:
 		gesturemode = DouTap ;
-        keyvalue = KEY_F3;
+        keyvalue = KEY_DOUBLE_TAP;
 		break ;
 
 	case SYNA_ONE_FINGER_DIRECTION:
 		switch(gesture[2]){
 		case 0x01:  //UP
 			gesturemode = DownVee ;
-			keyvalue = KEY_F5;
+			keyvalue = KEY_GESTURE_V;
 			break;
 		case 0x02:  //DOWN
 			gesturemode = UpVee ;
-			keyvalue = KEY_F5;
+			keyvalue = KEY_GESTURE_V;
 			break;
 		case 0x04:  //LEFT
 			gesturemode = RightVee ;
-			keyvalue = KEY_F7;
+			keyvalue = KEY_GESTURE_LTR;
 			break;
 		case 0x08:  //RIGHT
 			gesturemode = LeftVee ;
-			keyvalue = KEY_F8;
+			keyvalue = KEY_GESTURE_GTR;
 			break;
 		}
 		break;
@@ -3492,13 +3492,13 @@ static void synaptics_rmi4_set_params(struct synaptics_rmi4_data *rmi4_data)
 	set_bit(KEY_BACK, rmi4_data->input_dev->keybit);
 	set_bit(KEY_MENU, rmi4_data->input_dev->keybit);
 	set_bit(KEY_HOMEPAGE, rmi4_data->input_dev->keybit);
-	set_bit(KEY_F3, rmi4_data->input_dev->keybit);
-    set_bit(KEY_F4, rmi4_data->input_dev->keybit);
-    set_bit(KEY_F5, rmi4_data->input_dev->keybit);
-    set_bit(KEY_F6, rmi4_data->input_dev->keybit);
-    set_bit(KEY_F7, rmi4_data->input_dev->keybit);
-    set_bit(KEY_F8, rmi4_data->input_dev->keybit);
+	set_bit(KEY_DOUBLE_TAP, rmi4_data->input_dev->keybit);
     set_bit(KEY_POWER, rmi4_data->input_dev->keybit);
+    set_bit(KEY_GESTURE_CIRCLE, rmi4_data->input_dev->keybit);
+    set_bit(KEY_GESTURE_SWIPE_DOWN, rmi4_data->input_dev->keybit);
+    set_bit(KEY_GESTURE_V, rmi4_data->input_dev->keybit);
+    set_bit(KEY_GESTURE_LTR, rmi4_data->input_dev->keybit);
+    set_bit(KEY_GESTURE_GTR, rmi4_data->input_dev->keybit);
     synaptics_ts_init_virtual_key(rmi4_data) ;
 
 	input_set_abs_params(rmi4_data->input_dev,
