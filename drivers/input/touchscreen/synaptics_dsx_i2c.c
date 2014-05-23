@@ -1002,8 +1002,6 @@ static int syna_log_level = TS_INFO;
 static struct synaptics_rmi4_data *syna_rmi4_data=0;
 static struct regulator *vdd_regulator=0;
 static struct regulator *vdd_regulator_i2c=0;
-static int syna_use_gesture = 0 ;
-static int syna_use_gesture2 = 1 ;  //flag to support tp2.0
 static int syna_test_max_err_count = 10;
 static char synaptics_vendor_str[32];  //vendor string
 static char *synaptics_id_str;
@@ -1048,8 +1046,13 @@ static void vk_calculate_area(void)  //added by liujun
 	printk("[syna]maxx=%d,maxy=%d,vkh=%d\n",syna_ts_data->sensor_max_x,syna_ts_data->sensor_max_y,syna_ts_data->virtual_key_height);
 
 	syna_ts_data->vk_prop_width = LCD_MULTI_RATIO(190);
-	syna_ts_data->vk_prop_center_y = LCD_MULTI_RATIO(1977);
-	syna_ts_data->vk_prop_height = LCD_MULTI_RATIO(114);
+	if (get_pcb_version() <= HW_VERSION__20) {
+		syna_ts_data->vk_prop_center_y = LCD_MULTI_RATIO(1974);
+		syna_ts_data->vk_prop_height = LCD_MULTI_RATIO(120);
+	} else {
+		syna_ts_data->vk_prop_center_y = 2626;
+		syna_ts_data->vk_prop_height = 152;
+	}
 
 	for (i = 0; i < TP_VKEY_COUNT; ++i)
 	{
@@ -1121,15 +1124,20 @@ static int synaptics_ts_init_virtual_key(struct synaptics_rmi4_data *ts )
 static int get_virtual_key_button(int x, int y)
 {
 	int i;
+	int lcdheight = LCD_MAX_Y;
+
+	if (get_pcb_version() > HW_VERSION__20)
+		lcdheight = LCD_MAX_Y_FIND7S;
+
+	if (y <= lcdheight)
+		return 0;
+
 	for (i = 0; i < TP_VKEY_NONE; ++i)
 	{
 		struct tp_vkey_button* button = &vkey_buttons[i];
-		if ((x >= button->x) && (x <= button->x + button->width)
-			&& (y >= button->y) && (y <= button->y + button->height))
-		{
+		if ((x >= button->x) && (x <= button->x + button->width))
 			// In this button area.
 			break;
-		}
 	}
 	return i;
 }
@@ -1159,15 +1167,14 @@ static int synaptics_set_f12ctrl_data(struct synaptics_rmi4_data *rmi4_data, boo
 
     } else {
     	retval = synaptics_rmi4_i2c_read(syna_rmi4_data,SYNA_ADDR_GESTURE_FLAG,val,sizeof(val));
-		val[0] = syna_rmi4_data->gesture_enable & 0xff ;
-		retval = synaptics_rmi4_i2c_write(syna_rmi4_data,SYNA_ADDR_GESTURE_FLAG,val,sizeof(val));
-
-		if(enable)
+		if(enable) {
+			val[0] = 0x6b;
 			reportbuf[2] |= 0x02 ;
-		else {
+		} else {
+			val[0] = 0x00;
 			reportbuf[2] &= 0xfd ;
-			syna_use_gesture = (rmi4_data->gesture_enable&0xff)?1:0 ;
 		}
+		retval = synaptics_rmi4_i2c_write(syna_rmi4_data,SYNA_ADDR_GESTURE_FLAG,val,sizeof(val));
     }
 
 	retval = synaptics_rmi4_i2c_write(rmi4_data,
@@ -1187,19 +1194,7 @@ static int synaptics_set_f12ctrl_data(struct synaptics_rmi4_data *rmi4_data, boo
 
 static int synaptics_enable_gesture(struct synaptics_rmi4_data *rmi4_data, bool enable) {
 
-	if(!syna_use_gesture)
-		return 0 ;
-
-    if(rmi4_data->gesture == enable)
-		return 0 ;
-
-	if(synaptics_set_f12ctrl_data(rmi4_data,enable,0) < 0)
-		return -1 ;
-
-	rmi4_data->gesture = enable ;
-	print_ts(TS_DEBUG, KERN_ERR "[syna]:gesture source=0x%x\n", rmi4_data->gesture_enable);
-
-	return 0 ;
+	return synaptics_set_f12ctrl_data(rmi4_data, enable, 0);
 
 }
 
@@ -1245,7 +1240,7 @@ static int synaptics_enable_irqwake(struct synaptics_rmi4_data *rmi4_data, bool 
 static ssize_t synaptics_rmi4_gesture_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%u\n",syna_use_gesture);
+	return snprintf(buf, PAGE_SIZE, "%u\n", atomic_read(&syna_rmi4_data->syna_use_gesture));
 }
 
 static ssize_t synaptics_rmi4_gesture_store(struct device *dev,
@@ -1256,21 +1251,12 @@ static ssize_t synaptics_rmi4_gesture_store(struct device *dev,
 	if (sscanf(buf, "%u", &input) != 1)
 		return -EINVAL;
 
-	if (input == 21) {
-		if(syna_use_gesture == 0) {
-			syna_use_gesture = 1 ;
-			synaptics_enable_gesture(syna_rmi4_data,true);
-		}
+	if (input == 21 || input == 1) {
+		atomic_set(&syna_rmi4_data->syna_use_gesture, 1);
+		synaptics_enable_gesture(syna_rmi4_data,true);
 	}
-	else if (input == 20) {
-		if(syna_use_gesture) {
-			synaptics_enable_gesture(syna_rmi4_data,false);
-			syna_use_gesture = 0 ;
-		}
-	} else if(input == 1) {
-		syna_use_gesture = 1 ;
-	} else if(input == 0) {
-		syna_use_gesture = 0 ;
+	else if (input == 20 || input == 0) {
+		synaptics_enable_gesture(syna_rmi4_data,false);
 	}
 	else
 		return -EINVAL;
@@ -1290,8 +1276,6 @@ static int synaptics_rmi4_crood_read(char *page, char **start, off_t off,
 		syna_rmi4_data->points[8], syna_rmi4_data->points[9], syna_rmi4_data->points[10], syna_rmi4_data->points[11],
 		syna_rmi4_data->points[12]);
 
-	syna_use_gesture2 = 1 ;
-
 
 	return len ;
 }
@@ -1306,36 +1290,107 @@ static int synaptics_rmi4_pdoze_read(char *page, char **start, off_t off,
 	return len ;
 }
 
-static int synaptics_rmi4_proc_read(char *page, char **start, off_t off,
+static int synaptics_rmi4_proc_double_tap_read(char *page, char **start, off_t off,
 	int count, int *eof, void *data) {
-	int len = 0 ;
-	unsigned int enable ;
-
-	enable = (syna_rmi4_data->gesture_enable)?1:0;
-
-	len = sprintf(page, "%d\n", enable);
-
-	return len ;
+	return sprintf(page, "%d\n", atomic_read(&syna_rmi4_data->double_tap_enable));
 }
 
-static int synaptics_rmi4_proc_write( struct file *filp, const char __user *buff,
+static int synaptics_rmi4_proc_double_tap_write( struct file *filp, const char __user *buff,
 	unsigned long len, void *data ) {
-	unsigned char bak;
-	unsigned int enable ;
+	int enable ;
+	char buf[2];
 	if(len > 2)
 		return 0 ;
 
-	enable =(buff[0]==0x30)?0:1 ;
-	bak = syna_rmi4_data->gesture_enable ;
-	syna_rmi4_data->gesture_enable &= 0x00 ;
-	if(enable)
-		syna_rmi4_data->gesture_enable |= 0x6b ;
-	if(bak == syna_rmi4_data->gesture_enable)
-		return len ;
+	if (copy_from_user(buf, buff, len)) {
+		print_ts(TS_DEBUG, KERN_ERR "Read proc input error.\n");
+		return -EFAULT;
+	}
 
-    if(!(syna_use_gesture && syna_rmi4_data->gesture))
-	syna_use_gesture = (syna_rmi4_data->gesture_enable&0xff)?1:0 ;
-	print_ts(TS_DEBUG, KERN_ERR "enable=0x%x\n", syna_rmi4_data->gesture_enable);
+	enable = (buf[0] == '0') ? 0 : 1;
+
+	atomic_set(&syna_rmi4_data->double_tap_enable, enable);
+
+	return len;
+}
+
+static int synaptics_rmi4_proc_camera_read(char *page, char **start, off_t off,
+		int count, int *eof, void *data)
+{
+	return sprintf(page, "%d\n", atomic_read(&syna_rmi4_data->camera_enable));
+}
+
+static int synaptics_rmi4_proc_camera_write(struct file *filp, const char __user *buff,
+		unsigned long len, void *data)
+{
+	int enable;
+	char buf[2];
+
+	if (len > 2)
+		return 0;
+
+	if (copy_from_user(buf, buff, len)) {
+		print_ts(TS_DEBUG, KERN_ERR "Read proc input error.\n");
+		return -EFAULT;
+	}
+
+	enable = (buf[0] == '0') ? 0 : 1;
+
+	atomic_set(&syna_rmi4_data->camera_enable, enable);
+
+	return len;
+}
+
+static int synaptics_rmi4_proc_music_read(char *page, char **start, off_t off,
+		int count, int *eof, void *data)
+{
+	return sprintf(page, "%d\n", atomic_read(&syna_rmi4_data->music_enable));
+}
+
+static int synaptics_rmi4_proc_music_write(struct file *filp, const char __user *buff,
+		unsigned long len, void *data)
+{
+	int enable;
+	char buf[2];
+
+	if (len > 2)
+		return 0;
+
+	if (copy_from_user(buf, buff, len)) {
+		print_ts(TS_DEBUG, KERN_ERR "Read proc input error.\n");
+		return -EFAULT;
+	}
+
+	enable = (buf[0] == '0') ? 0 : 1;
+
+	atomic_set(&syna_rmi4_data->music_enable, enable);
+
+	return len;
+}
+
+static int synaptics_rmi4_proc_flashlight_read(char *page, char **start, off_t off,
+		int count, int *eof, void *data)
+{
+	return sprintf(page, "%d\n", atomic_read(&syna_rmi4_data->flashlight_enable));
+}
+
+static int synaptics_rmi4_proc_flashlight_write(struct file *filp, const char __user *buff,
+		unsigned long len, void *data)
+{
+	int enable;
+	char buf[2];
+
+	if (len > 2)
+		return 0;
+
+	if (copy_from_user(buf, buff, len)) {
+		print_ts(TS_DEBUG, KERN_ERR "Read proc input error.\n");
+		return -EFAULT;
+	}
+
+	enable = (buf[0] == '0') ? 0 : 1;
+
+	atomic_set(&syna_rmi4_data->flashlight_enable, enable);
 
 	return len;
 }
@@ -1360,10 +1415,16 @@ static int synaptics_rmi4_proc_smartcover_write( struct file *filp, const char _
 	unsigned char val[1];
 	unsigned char bak;
 	unsigned int enable ;
+	char buf[2];
 	if(len > 2)
 		return 0 ;
 
-	enable =(buff[0]==0x30)?0:1 ;
+	if (copy_from_user(buf, buff, len)) {
+		print_ts(TS_DEBUG, KERN_ERR "Read proc input error.\n");
+		return -EFAULT;
+	}
+
+	enable =(buf[0]=='0')?0:1 ;
 	bak = syna_rmi4_data->smartcover_enable ;
 	syna_rmi4_data->smartcover_enable &= 0x00 ;
 	if(enable)
@@ -1403,10 +1464,16 @@ static int synaptics_rmi4_proc_glove_write( struct file *filp, const char __user
 	unsigned char val[1];
 	unsigned char bak;
 	unsigned int enable ;
+	char buf[2];
 	if(len > 2)
 		return 0 ;
 
-	enable =(buff[0]==0x30)?0:1 ;
+	if (copy_from_user(buf, buff, len)) {
+		print_ts(TS_DEBUG, KERN_ERR "Read proc input error.\n");
+		return -EFAULT;
+	}
+
+	enable =(buf[0]=='0')?0:1 ;
 	bak = syna_rmi4_data->glove_enable ;
 	syna_rmi4_data->glove_enable &= 0x00 ;
 	if(enable)
@@ -1443,10 +1510,16 @@ static int synaptics_rmi4_proc_pdoze_read(char *page, char **start, off_t off,
 static int synaptics_rmi4_proc_pdoze_write( struct file *filp, const char __user *buff,
 	unsigned long len, void *data ) {
 	unsigned int enable ;
+	char buf[2];
 	if(len > 2)
 		return 0 ;
 
-	enable =(buff[0]==0x30)?0:1 ;
+	if (copy_from_user(buf, buff, len)) {
+		print_ts(TS_DEBUG, KERN_ERR "Read proc input error.\n");
+		return -EFAULT;
+	}
+
+	enable =(buff[0]=='0')?0:1 ;
 	if(enable == syna_rmi4_data->pdoze_enable)
 		return len ;
 
@@ -1455,7 +1528,44 @@ static int synaptics_rmi4_proc_pdoze_write( struct file *filp, const char __user
 	print_ts(TS_DEBUG, KERN_ERR "[syna]:pdoze enable=0x%x\n", syna_rmi4_data->pdoze_enable);
 
 	return len ;
+}
 
+static int keypad_enable_proc_read(char *page, char **start, off_t off,
+		int count, int *eof, void *data)
+{
+	struct synaptics_rmi4_data *ts = data;
+	return sprintf(page, "%d\n", atomic_read(&ts->keypad_enable));
+}
+
+static int keypad_enable_proc_write(struct file *file, const char __user *buffer,
+		unsigned long count, void *data)
+{
+	struct synaptics_rmi4_data *ts = data;
+	char buf[2];
+	unsigned int val = 0;
+
+	if (count > 2)
+		return count;
+
+	if (copy_from_user(buf, buffer, count)) {
+		printk(KERN_ERR "%s: read proc input error.\n", __func__);
+		return count;
+	}
+
+	val = (buf[0] == '0' ? 0 : 1);
+	atomic_set(&ts->keypad_enable, val);
+	if (val) {
+		set_bit(KEY_BACK, ts->input_dev->keybit);
+		set_bit(KEY_MENU, ts->input_dev->keybit);
+		set_bit(KEY_HOMEPAGE, ts->input_dev->keybit);
+	} else {
+		clear_bit(KEY_BACK, ts->input_dev->keybit);
+		clear_bit(KEY_MENU, ts->input_dev->keybit);
+		clear_bit(KEY_HOMEPAGE, ts->input_dev->keybit);
+	}
+	input_sync(ts->input_dev);
+
+	return count;
 }
 
 static int synaptics_rmi4_init_touchpanel_proc(void)
@@ -1465,19 +1575,41 @@ static int synaptics_rmi4_init_touchpanel_proc(void)
 	struct proc_dir_entry *procdir = proc_mkdir( "touchpanel", NULL );
 
     //glove mode inteface
-//	proc_entry = create_proc_entry("glove_mode_enable", 0666, procdir);
+	proc_entry = create_proc_entry("glove_mode_enable", 0666, procdir);
 	if (proc_entry) {
 		proc_entry->write_proc = synaptics_rmi4_proc_glove_write;
 		proc_entry->read_proc = synaptics_rmi4_proc_glove_read;
 	}
 
+	// double tap to wake
 	proc_entry = create_proc_entry("double_tap_enable", 0666, procdir);
 	if (proc_entry) {
-		proc_entry->write_proc = synaptics_rmi4_proc_write;
-		proc_entry->read_proc = synaptics_rmi4_proc_read;
+		proc_entry->write_proc = synaptics_rmi4_proc_double_tap_write;
+		proc_entry->read_proc = synaptics_rmi4_proc_double_tap_read;
 	}
 
-    //for pdoze enable/disable interface
+	// wake to camera
+	proc_entry = create_proc_entry("camera_enable", 0666, procdir);
+	if (proc_entry) {
+		proc_entry->write_proc = synaptics_rmi4_proc_camera_write;
+		proc_entry->read_proc = synaptics_rmi4_proc_camera_read;
+	}
+
+	// wake to music
+	proc_entry = create_proc_entry("music_enable", 0666, procdir);
+	if (proc_entry) {
+		proc_entry->write_proc = synaptics_rmi4_proc_music_write;
+		proc_entry->read_proc = synaptics_rmi4_proc_music_read;
+	}
+
+	// wake to flashlight
+	proc_entry = create_proc_entry("flashlight_enable", 0666, procdir);
+	if (proc_entry) {
+		proc_entry->write_proc = synaptics_rmi4_proc_flashlight_write;
+		proc_entry->read_proc = synaptics_rmi4_proc_flashlight_read;
+	}
+
+	//for pdoze enable/disable interface
 	proc_entry = create_proc_entry("pdoze_mode_enable", 0666, procdir);
 	if (proc_entry) {
 		proc_entry->write_proc = synaptics_rmi4_proc_pdoze_write;
@@ -1501,6 +1633,13 @@ static int synaptics_rmi4_init_touchpanel_proc(void)
 	proc_entry = create_proc_entry("coordinate", 0444, procdir);
 	if (proc_entry) {
 		proc_entry->read_proc = synaptics_rmi4_crood_read;
+	}
+
+	proc_entry = create_proc_entry("keypad_enable", 0666, procdir);
+	if (proc_entry) {
+		proc_entry->write_proc = keypad_enable_proc_write;
+		proc_entry->read_proc = keypad_enable_proc_read;
+		proc_entry->data = syna_rmi4_data;
 	}
 
 	return 0;
@@ -1545,9 +1684,9 @@ static int synaptics_set_int_mask(struct synaptics_rmi4_data *ts, int enable)
 static ssize_t synaptics_rmi4_baseline_data(char *buf, bool savefile)
 {
 //	return 0 ;
-#if 1
 	int ret = 0;
-	int x, y, i;
+	int x, y, i, j;
+	uint8_t use_cbc = 0;
 	int16_t read_data;
 	uint8_t tmp_old = 0;
 	uint8_t tmp_old2 = 0;
@@ -1558,7 +1697,7 @@ static ssize_t synaptics_rmi4_baseline_data(char *buf, bool savefile)
 	uint rx2rx_lower_limit = 0;
 	uint rx2rx_upper_limit = 0;
 	const int16_t *raw_cap_data = NULL;
-//	int16_t Rxdata[RX_NUM][RX_NUM];
+	int16_t *cdata;
 	int16_t *Rxdata = NULL;
 	int error_count = 0;
 	static bool isbaseline = 0 ;
@@ -1605,11 +1744,10 @@ static ssize_t synaptics_rmi4_baseline_data(char *buf, bool savefile)
 		rx2rx_lower_limit = DiagonalLowerLimit_TPK;
 		rx2rx_upper_limit = DiagonalUpperLimit_TPK;
 		raw_cap_data = (const int16_t *)raw_cap_data_tpk;
-		if (get_pcb_version() >= HW_VERSION__21) {
-			tx_num = TX_NUM_TPK_FIND7S;
-			rx_num = RX_NUM_TPK_FIND7S;
-			raw_cap_data = (const int16_t *)raw_cap_data_tpk_find7s;
-		}
+#ifndef CONFIG_OPPO_DEVICE_FIND7OP
+		use_cbc = 1;
+#endif
+
 	}
 	else if (syna_ts_data->vendor_id == TP_VENDOR_YOUNGFAST)
 	{
@@ -1643,7 +1781,47 @@ static ssize_t synaptics_rmi4_baseline_data(char *buf, bool savefile)
 	tmp_new = 0x03 ;//set report type 0x03
 	synaptics_rmi4_i2c_write(syna_ts_data,F54_DATA_BASE_ADDR,	&tmp_new,1);
 
-#if 1
+	// Forbid NoiseMitigation
+	tmp_new = 0x01;
+	synaptics_rmi4_i2c_write(syna_ts_data, F54_CTRL_BASE_ADDR +7, &tmp_new,1);
+	tmp_new = 0x04;
+	synaptics_rmi4_i2c_write(syna_ts_data, F54_CMD_BASE_ADDR, &tmp_new,1); // force update
+	wait_test_cmd_finished();
+	print_ts(TS_DEBUG, "Forbid NoiseMitigation oK\n");
+	tmp_new = 0x02;
+	synaptics_rmi4_i2c_write(syna_ts_data, F54_CMD_BASE_ADDR, &tmp_new,1); // force cal
+	wait_test_cmd_finished();
+	print_ts(TS_DEBUG, "Force Cal oK\n");
+
+	word_value = 0;//set fifo 00
+	synaptics_rmi4_i2c_write(syna_ts_data,F54_DATA_BASE_ADDR+1,	(unsigned char*)&word_value,2);
+	tmp_new = 0x01;
+	synaptics_rmi4_i2c_write(syna_ts_data, F54_CMD_BASE_ADDR, &tmp_new,1);
+	wait_test_cmd_finished();
+
+	if (savefile) {
+		getnstimeofday(&now_time);
+		rtc_time_to_tm(now_time.tv_sec, &rtc_now_time);
+		sprintf(data_buf, "/sdcard/tp_testlimit_%02d%02d%02d-%02d%02d%02d.csv",
+				(rtc_now_time.tm_year+1900)%100, rtc_now_time.tm_mon+1, rtc_now_time.tm_mday,
+				rtc_now_time.tm_hour, rtc_now_time.tm_min, rtc_now_time.tm_sec);
+
+		old_fs = get_fs();
+		set_fs(KERNEL_DS);
+
+		fd = sys_open(data_buf, O_WRONLY | O_CREAT | O_TRUNC, 0);
+		if (fd < 0) {
+			print_ts(TS_DEBUG, "Open log file '%s' failed.\n", data_buf);
+			set_fs(old_fs);
+		}
+	}
+
+	cdata = (int16_t *)raw_cap_data ;
+	for (j = 0; j < 2; j++) {
+		if ((!use_cbc && !j) || (use_cbc && j)) {
+			tmp_new = 20 ;//set report type 0x20, for disable cbc
+			synaptics_rmi4_i2c_write(syna_ts_data,F54_DATA_BASE_ADDR, &tmp_new, 1);
+
 	// forbid CBC
 	tmp_new = 1;
 	synaptics_rmi4_i2c_write(syna_ts_data, F54_CTRL_BASE_ADDR +20, &tmp_new,1);
@@ -1661,7 +1839,6 @@ static ssize_t synaptics_rmi4_baseline_data(char *buf, bool savefile)
 	synaptics_rmi4_i2c_write(syna_ts_data, F54_CMD_BASE_ADDR, &tmp_new,1); // force update
 	wait_test_cmd_finished();
 	print_ts(TS_DEBUG, "Forbid CBC oK\n");
-#endif
 
 	// Forbid NoiseMitigation
 	tmp_new = 0x01 ;
@@ -1681,23 +1858,10 @@ static ssize_t synaptics_rmi4_baseline_data(char *buf, bool savefile)
 	synaptics_rmi4_i2c_write(syna_ts_data, F54_CMD_BASE_ADDR, &tmp_new,1);
 	wait_test_cmd_finished();
 
-	if(savefile) {
-		getnstimeofday(&now_time);
-		rtc_time_to_tm(now_time.tv_sec, &rtc_now_time);
-		sprintf(data_buf, "/sdcard/tp_testlimit_%02d%02d%02d-%02d%02d%02d.csv",
-				(rtc_now_time.tm_year+1900)%100, rtc_now_time.tm_mon+1, rtc_now_time.tm_mday,
-				rtc_now_time.tm_hour, rtc_now_time.tm_min, rtc_now_time.tm_sec);
-
-		old_fs = get_fs();
-		set_fs(KERNEL_DS);
-
-		fd = sys_open(data_buf, O_WRONLY | O_CREAT | O_TRUNC, 0);
-		if (fd < 0) {
-			print_ts(TS_DEBUG, "Open log file '%s' failed.\n", data_buf);
-			set_fs(old_fs);
+		} else if (!use_cbc && j) {
+			break;
 		}
 
-	}
 
 	for(x = 0;x < tx_num; x++)
 	{
@@ -1708,7 +1872,7 @@ static ssize_t synaptics_rmi4_baseline_data(char *buf, bool savefile)
 			read_data = ret & 0xffff;
 
 			print_ts(TS_DEBUG, "Raw[%d][%d] = %d,  ", x, y, read_data);
-			print_ts(TS_DEBUG, "range:[%d ~ %d], ", raw_cap_data[x*rx_num*2+i], raw_cap_data[x*rx_num*2+i+1]);
+			print_ts(TS_DEBUG, "range:[%d ~ %d], ", cdata[0], cdata[1]);
 
 			if (fd >= 0)
 			{
@@ -1716,7 +1880,7 @@ static ssize_t synaptics_rmi4_baseline_data(char *buf, bool savefile)
 				sys_write(fd, data_buf, strlen(data_buf));
 			}
 
-			if (read_data >= raw_cap_data[x*rx_num*2+i] && read_data <= raw_cap_data[x*rx_num*2+i+1])
+			if (read_data >= cdata[0] && read_data <= cdata[1])
 			{
 				print_ts(TS_DEBUG, "pass.\n");
 			}
@@ -1732,11 +1896,12 @@ static ssize_t synaptics_rmi4_baseline_data(char *buf, bool savefile)
 					}
 				} else {
 					num_read_chars += sprintf(&(buf[num_read_chars]), "%2d++ raw_cap[%02d][%02d]=%4d is not in range[%04d~%04d].\n",
-										++error_count,x,y,read_data,raw_cap_data[x*rx_num*2+i],raw_cap_data[x*rx_num*2+i+1]);
+										++error_count,x,y,read_data,cdata[0],cdata[1]);
 				}
 
 			}
 			i+=2;
+				cdata += 2 ;
 		}
 
 		if (fd >= 0)
@@ -1747,7 +1912,7 @@ static ssize_t synaptics_rmi4_baseline_data(char *buf, bool savefile)
 		print_ts(TS_DEBUG, "------------------------------\n");
 	}
 
-
+		if ((!use_cbc && !j) || (use_cbc && j)) {
 	synaptics_rmi4_i2c_write(syna_ts_data,F54_CTRL_BASE_ADDR+23,	(unsigned char*)&tmp_old,1);
 	synaptics_rmi4_i2c_write(syna_ts_data,F54_CTRL_BASE_ADDR+25,	(unsigned char*)&tmp_old2,1);
 	tmp_new = 0;
@@ -1755,15 +1920,16 @@ static ssize_t synaptics_rmi4_baseline_data(char *buf, bool savefile)
 	tmp_new = 4 ;
 	synaptics_rmi4_i2c_write(syna_ts_data,F54_CMD_BASE_ADDR,	(unsigned char*)&tmp_new,1); // force update
 	wait_test_cmd_finished();
+		}
+	}
 
-/*
 	print_ts(TS_DEBUG, "Step 2 : Check trx-to-trx  \n");
 	tmp_new = 26 ;
 	synaptics_rmi4_i2c_write(syna_ts_data,F54_DATA_BASE_ADDR,	(unsigned char*)&tmp_new,1); //select report type 0x05
 
 
 	tmp_new = 0 ;
-	synaptics_rmi4_i2c_write(syna_ts_data,F54_DATA_BASE_ADDR+1,	(unsigned char*)&tmp_new,1);
+	synaptics_rmi4_i2c_write(syna_ts_data,F54_DATA_BASE_ADDR+1,	(unsigned char*)data_buf, 2);
 	tmp_new = 1 ;
 	synaptics_rmi4_i2c_write(syna_ts_data,F54_CMD_BASE_ADDR,	(unsigned char*)&tmp_new,1); //get report
 	wait_test_cmd_finished();
@@ -1779,10 +1945,9 @@ static ssize_t synaptics_rmi4_baseline_data(char *buf, bool savefile)
 		}
 	}
 	if(x > 0) {
-		num_read_chars += sprintf(&(buf[num_read_chars]), "  == Reach max error count (%d), stop test.\n", syna_test_max_err_count);
+		num_read_chars += sprintf(&(buf[num_read_chars]), " TRx To TRx Short Test Failed[%d]!\n",x);
 		//goto END_TP_TEST;
 	}
-*/
 
 
 //step 5:reset touchpanel and reconfig the device
@@ -1813,7 +1978,6 @@ END_TP_TEST:
 	isbaseline = false ;
 
 	return num_read_chars;
-#endif
 }
 
 static ssize_t synaptics_rmi4_baseline_store(struct device *dev,
@@ -1879,13 +2043,16 @@ static struct synaptics_dsx_platform_data dsx_platformdata = {
 
  static int synaptics_init_gpio(struct synaptics_rmi4_data *ts)
 {
-	int i,ret = 0 ;
+	int i;
 	struct gpio synaptics_all_gpio[] =
 	{
 		{ts->irq_gpio, GPIO_CFG(ts->irq_gpio, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), "synaptics_irq_gpio"},
 		{ts->reset_gpio, GPIO_CFG(ts->reset_gpio, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), "synaptics_reset_gpio"},
 		{ts->wakeup_gpio, GPIO_CFG(ts->wakeup_gpio, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), "synaptics_wakeup_gpio"},
 		{ts->id_gpio, GPIO_CFG(ts->id_gpio, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), "synaptics_id_gpio"},
+#ifndef CONFIG_OPPO_DEVICE_FIND7OP
+		{ts->id3_gpio, GPIO_CFG(ts->id3_gpio, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), "synaptics_id3_gpio"},
+#endif
 	};
 
     for(i = 0 ;i < sizeof(synaptics_all_gpio)/sizeof(struct gpio);i ++) {
@@ -1893,7 +2060,7 @@ static struct synaptics_dsx_platform_data dsx_platformdata = {
 		gpio_request(synaptics_all_gpio[i].gpio,synaptics_all_gpio[i].label);
    }
 
-	return ret ;
+	return 0 ;
 }
 
 
@@ -1909,7 +2076,9 @@ static struct synaptics_dsx_platform_data dsx_platformdata = {
 		ts->reset_gpio  = of_get_named_gpio(np, "synaptics,reset-gpio", 0);
 		ts->wakeup_gpio = of_get_named_gpio(np, "synaptics,wakeup-gpio", 0);  //gpio 57
 		ts->id_gpio     = of_get_named_gpio(np, "synaptics,id-gpio", 0);  //gpio 62
-
+#ifndef CONFIG_OPPO_DEVICE_FIND7OP
+		ts->id3_gpio    = of_get_named_gpio(np, "synaptics,id3-gpio", 0);  //gpio 46
+#endif
 		ret = 0;
 	}
 	return ret;
@@ -2029,6 +2198,7 @@ static unsigned char synaptics_rmi4_update_gesture2(unsigned char *gesture,unsig
 		}
 
 		if(gesturemode!=UnkownGestrue)	{
+			if (atomic_read(&syna_rmi4_data->music_enable))
             keyvalue = KEY_GESTURE_SWIPE_DOWN;
 		}
 
@@ -2036,6 +2206,7 @@ static unsigned char synaptics_rmi4_update_gesture2(unsigned char *gesture,unsig
 
 	case SYNA_ONE_FINGER_DOUBLE_TAP:
 		gesturemode = DouTap ;
+		if (atomic_read(&syna_rmi4_data->double_tap_enable))
         keyvalue = KEY_DOUBLE_TAP;
 		break ;
 
@@ -2047,14 +2218,17 @@ static unsigned char synaptics_rmi4_update_gesture2(unsigned char *gesture,unsig
 			break;
 		case 0x02:  //DOWN
 			gesturemode = UpVee ;
+			if (atomic_read(&syna_rmi4_data->flashlight_enable))
 			keyvalue = KEY_GESTURE_V;
 			break;
 		case 0x04:  //LEFT
 			gesturemode = RightVee ;
+			if (atomic_read(&syna_rmi4_data->music_enable))
 			keyvalue = KEY_GESTURE_LTR;
 			break;
 		case 0x08:  //RIGHT
 			gesturemode = LeftVee ;
+			if (atomic_read(&syna_rmi4_data->music_enable))
 			keyvalue = KEY_GESTURE_GTR;
 			break;
 		}
@@ -2158,7 +2332,7 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	}
 #endif
 
-    if(rmi4_data->gesture ) {
+    if(atomic_read(&rmi4_data->syna_use_gesture )) {
 		retval = synaptics_rmi4_i2c_read(rmi4_data,
 				SYNA_ADDR_GESTURE_OFFSET,
 				gesture,
@@ -2169,9 +2343,7 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 				sizeof(gestureext));
 	    if(gesture[0]) {
 				keyvalue = synaptics_rmi4_update_gesture2(gesture,gestureext);
-				if(syna_use_gesture2 && keyvalue)
-					keyvalue = KEY_F4 ;
-				if(keyvalue != KEY_F9 && keyvalue) {
+				if(keyvalue && keyvalue != KEY_F9) {
 				    input_report_key(rmi4_data->input_dev, keyvalue, 1);
 					input_sync(rmi4_data->input_dev);
 					input_report_key(rmi4_data->input_dev, keyvalue, 0);
@@ -2232,11 +2404,13 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 
 			if (y > rmi4_data->sensor_max_y- rmi4_data->snap_top - rmi4_data->snap_bottom-rmi4_data->virtual_key_height)
 			{
-				int pressed_vkey = get_virtual_key_button(x, y);
-				if (pressed_vkey == TP_VKEY_NONE)
+				if (!atomic_read(&rmi4_data->keypad_enable))
 				{
 					continue;
 				}
+			}
+			if (get_virtual_key_button(x, y) == TP_VKEY_NONE) {
+				continue;
 			}
 
 			if((y > SYNA_SMARTCOVER_MAN || y < SYNA_SMARTCOVER_MIN) && rmi4_data->smartcover_enable) {
@@ -3569,6 +3743,18 @@ static int synaptics_rmi4_set_input_dev(struct synaptics_rmi4_data *rmi4_data)
 	set_bit(EV_ABS, rmi4_data->input_dev->evbit);
 	set_bit(BTN_TOUCH, rmi4_data->input_dev->keybit);
 	set_bit(BTN_TOOL_FINGER, rmi4_data->input_dev->keybit);
+
+	atomic_set(&rmi4_data->keypad_enable, 1);
+
+	atomic_set(&rmi4_data->syna_use_gesture, 0);
+	atomic_set(&rmi4_data->double_tap_enable, 0);
+	atomic_set(&rmi4_data->camera_enable, 0);
+	atomic_set(&rmi4_data->music_enable, 0);
+	atomic_set(&rmi4_data->flashlight_enable, 0);
+
+	rmi4_data->glove_enable = 0;
+	rmi4_data->pdoze_enable = 0;
+
 #ifdef INPUT_PROP_DIRECT
 	set_bit(INPUT_PROP_DIRECT, rmi4_data->input_dev->propbit);
 #endif
@@ -3648,8 +3834,8 @@ static int synaptics_rmi4_reinit_device(struct synaptics_rmi4_data *rmi4_data)
 
 	synaptics_rmi4_set_configured(rmi4_data);
 
-	if(syna_use_gesture && rmi4_data->gesture) {
-		synaptics_set_f12ctrl_data(rmi4_data,rmi4_data->gesture,0);
+	if (atomic_read(&rmi4_data->syna_use_gesture)) {
+		synaptics_set_f12ctrl_data(rmi4_data, true, 0);
 	}
 
 	tmp_new = 4 ;
@@ -4336,8 +4522,6 @@ static void synaptics_rmi4_sensor_wake(struct synaptics_rmi4_data *rmi4_data)
 	} else {
 		rmi4_data->sensor_sleep = false;
 	}
-
-	return;
 }
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
@@ -4370,8 +4554,6 @@ static void synaptics_rmi4_early_suspend(struct early_suspend *h)
 
 	if (rmi4_data->full_pm_cycle)
 		synaptics_rmi4_suspend(&(rmi4_data->input_dev->dev));
-
-	return;
 }
 
  /**
@@ -4407,8 +4589,6 @@ static void synaptics_rmi4_late_resume(struct early_suspend *h)
 					__func__);
 		}
 	}
-
-	return;
 }
 #endif
 
@@ -4426,8 +4606,6 @@ static int synaptics_rmi4_suspend(struct device *dev)
 {
 	struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(dev);
 	unsigned char val=0;
-	const struct synaptics_dsx_platform_data *platform_data =
-			rmi4_data->board;
 
 	if(rmi4_data->pwrrunning)
 		return 0 ;
@@ -4440,10 +4618,16 @@ static int synaptics_rmi4_suspend(struct device *dev)
 	if(rmi4_data->glove_enable)
 		synaptics_rmi4_i2c_write(syna_rmi4_data,SYNA_ADDR_GLOVE_FLAG,&val,sizeof(val));
 
+	atomic_set(&rmi4_data->syna_use_gesture,
+			atomic_read(&rmi4_data->double_tap_enable) ||
+			atomic_read(&rmi4_data->camera_enable) ||
+			atomic_read(&rmi4_data->music_enable) ||
+			atomic_read(&rmi4_data->flashlight_enable) ? 1 : 0);
+
+	if (atomic_read(&rmi4_data->syna_use_gesture) || rmi4_data->pdoze_enable) {
     synaptics_enable_gesture(rmi4_data,true);
 	synaptics_enable_pdoze(rmi4_data,true);
 
-	if(rmi4_data->gesture || rmi4_data->pdoze_enable) {
 		synaptics_enable_irqwake(rmi4_data,true);
 		rmi4_data->pwrrunning = false ;
 		return 0;
@@ -4462,9 +4646,9 @@ static int synaptics_rmi4_suspend(struct device *dev)
 		synaptics_rmi4_free_fingers(rmi4_data);
 
         //when suspend, close tp's vdd power
-		if (platform_data->regulator_en) {
+//		if (platform_data->regulator_en) {
 //			regulator_disable(rmi4_data->regulator);
-		}
+//		}
 	}
 
 
@@ -4500,13 +4684,9 @@ static int synaptics_rmi4_resume(struct device *dev)
 	int retval;
 	unsigned char val=1;
 	struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(dev);
-	const struct synaptics_dsx_platform_data *platform_data =
-			rmi4_data->board;
 
 	if(rmi4_data->pwrrunning)
 		return 0 ;
-
-    print_ts(TS_INFO, KERN_ERR "gesture status[0x%x,0x%x]\n", syna_use_gesture,rmi4_data->gesture_enable);
 
     rmi4_data->pwrrunning = true ;
 
@@ -4516,10 +4696,15 @@ static int synaptics_rmi4_resume(struct device *dev)
 	if(rmi4_data->glove_enable)
 		synaptics_rmi4_i2c_write(syna_rmi4_data,SYNA_ADDR_GLOVE_FLAG,&val,sizeof(val));
 
-	if(rmi4_data->gesture || rmi4_data->pdoze_enable) {
+	if(atomic_read(&rmi4_data->syna_use_gesture) || rmi4_data->pdoze_enable) {
 	    synaptics_enable_gesture(rmi4_data,false);
 		synaptics_enable_pdoze(rmi4_data,false);
 		synaptics_enable_irqwake(rmi4_data,false);
+		atomic_set(&rmi4_data->syna_use_gesture,
+			atomic_read(&rmi4_data->double_tap_enable) ||
+			atomic_read(&rmi4_data->camera_enable) ||
+			atomic_read(&rmi4_data->music_enable) ||
+			atomic_read(&rmi4_data->flashlight_enable) ? 1 : 0);
 		rmi4_data->pwrrunning = false ;
 		return 0;
 	}
@@ -4535,11 +4720,11 @@ static int synaptics_rmi4_resume(struct device *dev)
 	}
 
     //resume tp's vdd power
-	if (platform_data->regulator_en) {
+//	if (platform_data->regulator_en) {
 //		regulator_enable(rmi4_data->regulator);
 //		msleep(platform_data->reset_delay_ms);
 //		rmi4_data->current_page = MASK_8BIT;
-	}
+//	}
 
 	synaptics_rmi4_sensor_wake(rmi4_data);
 	synaptics_rmi4_irq_enable(rmi4_data, true);
