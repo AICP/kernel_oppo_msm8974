@@ -230,6 +230,8 @@ enum msm_vfe_reg_cfg_type {
 	GET_SOC_HW_VER,
 #ifndef CONFIG_MSMB_CAMERA_OPPO
 	GET_MAX_CLK_RATE,
+	VFE_HW_UPDATE_LOCK,
+	VFE_HW_UPDATE_UNLOCK,
 #endif
 };
 
