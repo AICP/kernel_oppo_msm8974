@@ -2035,6 +2035,8 @@ qpnp_chg_usb_usbin_valid_irq_handler(int irq, void *_chip)
 		if (!usb_present) {
 			power_supply_set_online(chip->usb_psy, 0);
 			power_supply_set_current_limit(chip->usb_psy, 0);
+			power_supply_set_online(&chip->dc_psy, 0);
+			power_supply_set_current_limit(&chip->dc_psy, 0);
 		}
 #endif
 #ifdef CONFIG_BQ24196_CHARGER
