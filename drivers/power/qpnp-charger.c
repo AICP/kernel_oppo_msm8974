@@ -302,9 +302,9 @@ static struct qpnp_battery_gauge *qpnp_batt_gauge = NULL;
 
 #ifdef CONFIG_BQ24196_CHARGER
 static struct qpnp_external_charger *qpnp_ext_charger = NULL;
-#endif
-
 #endif /*CONFIG_BQ24196_CHARGER*/
+
+#endif
 
 struct qpnp_chg_irq {
 	int		irq;
@@ -5784,21 +5784,13 @@ static int soft_aicl(struct qpnp_chg_chip *chip)
 	for(i = 0; i < MAX_COUNT; i++) {
 		chg_vol = get_prop_charger_voltage_now(chip);
 		if(chg_vol < SOFT_AICL_VOL) {
-			if (get_pcb_version() >= HW_VERSION__20) { /* sjc2014-05-09 for Find7s to avoid temp high */
-				qpnp_chg_iusbmax_set(chip, 900);
-			} else {
-				qpnp_chg_iusbmax_set(chip, 1500);
-			}
-				chip->aicl_current = 1500;
+			qpnp_chg_iusbmax_set(chip, 1500);
+			chip->aicl_current = 1500;
 			qpnp_chg_vinmin_set(chip, chip->min_voltage_mv + 280);///4.68V sjc0401 add for improving current noise (bq24196 hardware bug)
 			return 0;
 		}
 	}
-	if (get_pcb_version() >= HW_VERSION__20) { /* sjc2014-05-09 for Find7s to avoid temp high */
-		qpnp_chg_iusbmax_set(chip, 900);
-	} else {
-		qpnp_chg_iusbmax_set(chip, 1500);
-	}
+	qpnp_chg_iusbmax_set(chip, 1500);
 	chip->aicl_current = 2000;
 	return 0;
 }
@@ -6142,12 +6134,12 @@ static int handle_batt_temp_normal(struct qpnp_chg_chip *chip)
 		if(ret.intval / 1000 == 500) {
 			qpnp_chg_iusbmax_set(chip, ret.intval / 1000);
 		} else {
-			/* jingchun.wang@Onlinerd.Driver, 2013/12/27  Add for auto adapt current by software. */
+		/* jingchun.wang@Onlinerd.Driver, 2013/12/27  Add for auto adapt current by software. */
 			if(qpnp_charger_type_get(chip) == POWER_SUPPLY_TYPE_USB_DCP) {
 				if(chip->aicl_current == 0) {
 					soft_aicl(chip);
 				} else {
-					if(chip->aicl_current == 1500) {
+					if(chip->aicl_current == 2000) {
 						qpnp_chg_iusbmax_set(chip, 1500);
 					} else {
 						qpnp_chg_iusbmax_set(chip, chip->aicl_current);
@@ -6861,7 +6853,7 @@ static int fb_notifier_callback(struct notifier_block *self,
 }
 #endif /*CONFIG_FB*/
 
-#endif
+#endif /* CONFIG_VENDOR_EDIT */
 
 static int __devinit
 qpnp_charger_probe(struct spmi_device *spmi)
@@ -7270,7 +7262,7 @@ qpnp_charger_probe(struct spmi_device *spmi)
 					__func__, rc);
 		device_remove_file(chip->dev, &dev_attr_test_chg_vol);
 	}
-#endif
+#endif /* CONFIG_VENDOR_EDIT */
 
 	pr_info("success chg_dis = %d, bpd = %d, usb = %d, dc = %d b_health = %d batt_present = %d\n",
 			chip->charging_disabled,

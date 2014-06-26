@@ -2,11 +2,11 @@
 **
 ** Copyright (C), 2000-2012, OPPO Mobile Comm Corp., Ltd
 ** All rights reserved.
-**
+** 
 ** VENDOR_EDIT
-**
+** 
 ** Description: fastchg pic16f1503 driver
-**
+** 
 ** from
 ** kernel/drivers/power/pic1503.c
 **
@@ -20,15 +20,15 @@
 ** but WITHOUT ANY WARRANTY; without even the implied warranty of
 ** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ** GNU General Public License for more details.
-**
-**
+** 
+** 
 ** --------------------------- Revision History: --------------------------------
 ** <author>		                      <data> 	<version >  <desc>
 ** ------------------------------------------------------------------------------
 ** liaofuchun@EXP.Driver	  2013/12/22   	1.1	    create file
 ** liaofuchun@EXP.Driver	  2013/12/30 	1.2	    add 3A/2A charging
 ** liaofuchun@EXP.Driver	  2013/01/10 	1.3	    improve 1503 fw update,add battery connection detect,decrease current quickly
-** liaofuchun@EXP.Driver	  2013/01/11 	1.4	    add battery connection detect and battery type
+** liaofuchun@EXP.Driver	  2013/01/11 	1.4	    add battery connection detect and battery type	
 ** liaofuchun@EXP.Driver      2013/01/21    1.5     adapter add current_level(3A 3.25A 3.5A.... 5A) and circuit_res(20mohm 25mohm 30mohm .... 80mohm)
 ** liaofuchun@EXP.Driver      2013/01/23    1.6     1)modify:mcu1503 reset after receive "usb bad connect" 2)avoid data pin are both in output direction
 ** liaofuchun@EXP.Driver      2013/01/25    1.7     1)not close RA5 interrupt and TMR2ON before reset 2)set debounce time in RA5 interrupt
@@ -110,7 +110,7 @@ void set_rc4_output(void)
 {
 	RC4 = 0;
 	LATC4 = 0;
-	TRISC4 = 0;
+	TRISC4 = 0;	
 	RC4 = 0;
 	LATC4 = 0;
 }
@@ -119,7 +119,7 @@ void set_rc4_input(void)
 {
 	RC4 = 0;
 	LATC4 = 0;
-	TRISC4 = 1;
+	TRISC4 = 1;	
 }
 void delay_44us();
 void notify_ap_start_tx(void)
@@ -131,13 +131,14 @@ void notify_ap_start_tx(void)
 	RC4 = 1;
 }
 
-#define NOTIFY_FAST_PRESENT		0x52
-#define NOTIFY_FAST_ABSENT		0x54
+#define NOTIFY_FAST_PRESENT			0x52
+#define NOTIFY_FAST_ABSENT			0x54
 #define NOTIFY_ALLOW_READING_IIC	0x58
-#define NOTIFY_FAST_FULL		0x5a
-#define NOTIFY_FIRMWARE_UPDATE	0x56
-#define NOTIFY_BAD_CONNECTED	0x59
-#define NOTIFY_TEMP_OVER		0x5c
+#define NOTIFY_FAST_FULL			0x5a
+#define NOTIFY_FAST_LOW_TEMP_FULL	0x53
+#define NOTIFY_FIRMWARE_UPDATE		0x56
+#define NOTIFY_BAD_CONNECTED		0x59
+#define NOTIFY_TEMP_OVER			0x5c
 
 char tx_data_to_ap(char info)
 {
@@ -148,7 +149,7 @@ char tx_data_to_ap(char info)
 	int count = 0;
 
 	asm("clrwdt");
-	tx_data = info;
+	tx_data = info;	
 	ap_isr_rcvd = 0;
 	notify_ap_start_tx();
 
@@ -156,7 +157,7 @@ char tx_data_to_ap(char info)
 	//_tx_data(tx_data);
 
 	for( i = 0; i < 7; i++)
-	{
+	{	
 		//lfc add to avoid both RC5_1503 and RC5_1823 are in output direction
 		if(need_to_reset && (info == NOTIFY_ALLOW_READING_IIC)){
 			set_rc5_input();
@@ -168,12 +169,12 @@ char tx_data_to_ap(char info)
 				#asm;
 				RESET;
 				#endasm;
-			}
+			}	
 			#asm;
 			NOP;
 			NOP;
 			NOP;
-			#endasm;
+			#endasm;	
 		};
 		count = 0;
 		RC4 = (tx_data>>(6-i))&1;	//send data before pull up clk
@@ -197,7 +198,7 @@ char tx_data_to_ap(char info)
 				#asm;
 				RESET;
 				#endasm;
-			}
+			}	
 			#asm;
 			NOP;
 			NOP;
@@ -205,10 +206,10 @@ char tx_data_to_ap(char info)
 			#endasm;
 		};
 		count = 0;
-		if(i == 0){
+		if(i == 0){		
 			set_rc4_input();
 			delay_44us();
-		}
+		} 
 		ap_isr_rcvd = 0;
 		bt = RC4;
 		if(i == 2){		//the third bit is battery_type,the other 2bits is ret_info
@@ -222,7 +223,7 @@ char tx_data_to_ap(char info)
 	delay_20ms();
 	delay_20ms();
 	asm("clrwdt");
-	return data;	//data->2:commu with ap success,data->1:commu with ap fail
+	return data;	//data->2:commu with ap success,data->1:commu with ap fail	
 }
 
 void delay_800ms();
@@ -268,7 +269,7 @@ void tell_ap_fw_ver(void)
 		nPOR = 1;
 		#asm;
 		RESET;
-		#endasm;
+		#endasm;	
 	}else if(rc == 1){
 		nPOR = 1;	//set nPOR 1,avoid go into it again
 		return ;
@@ -320,7 +321,7 @@ void tell_ap_fw_ver(void)
 		//nPOR = 1;
 		#asm;
 		RESET;
-		#endasm;
+		#endasm;	
 	}else if(rc == 1){
 		//nPOR = 1;	//set nPOR 1,avoid go into it again
 		return ;
@@ -371,7 +372,7 @@ void interrupt isr(void)	//void interrupt **** is the entrance for all the inter
 		TMR1IF = 0;
 		tm1_count++;
 		if(tm1_count > 9){	//tm1_count(15)->8.4s tm1_count(9):5.27s	delay_time = 0.52428 * (tm1_count + 1)
-			tm1_count = 0;
+			tm1_count = 0;	
 		}
 	}
 */
@@ -416,9 +417,9 @@ void interrupt isr(void)	//void interrupt **** is the entrance for all the inter
 			TMR2ON = 1;
 			ra5_first_int = 1;
 		}
-		adapter_commu_with_mcu();
-		return ;
-	}
+		adapter_commu_with_mcu();	
+		return ;	
+	}	
 }
 
 int i2c_init()
@@ -458,7 +459,7 @@ int i2c_init()
 	CLC2GLS2 = 0;
 	CLC1GLS3 = 0;
 	CLC2GLS3 = 0;
-
+	
 	//config NCO1
 	NCO1CON = 0;
 	NCO1ACCL = 0;
@@ -482,7 +483,7 @@ int i2c_init()
 	CLC3CON = 0; //forbid CLC3 on RB4/RB6
 	LATB4 = 0;
 	LATB6 = 0;
-*/
+*/	
 	//initial hardware begin
 	SSP1CON1 = 0x00;
     SSP1CON2 = 0x00;
@@ -538,13 +539,13 @@ void i2c_ack(void)
 void i2c_noack(void)
 {
 	ACKDT = 1;
-	ACKEN = 0;
+	ACKEN = 0;	
 }
 */
 void delay_40us();
 void i2c_write(char reg_addr)
 {
-	//step 1:send bq27541 i2c slave addr to bq27541
+	//step 1:send bq27541 i2c slave addr to bq27541	
 	i2c_int_finished = 1;	//lfc add later
 	SSP1BUF = BQ27541_WRITE_ADDR;	//send bq27541 slave addr to bq27541
 	while(BF);
@@ -558,7 +559,7 @@ void i2c_write(char reg_addr)
 	SSP1BUF = reg_addr;
 	while(BF);
 	//while(interrupt_finished);	//lfc add later
-	while(ACKSTAT);
+	while(ACKSTAT);		
 }
 
 int i2c_read()		//lfc add remark:don't split i2c_start i2c_ack i2c_stop from i2c_read,maybe something wrong will happen
@@ -576,10 +577,10 @@ int i2c_read()		//lfc add remark:don't split i2c_start i2c_ack i2c_stop from i2c
 	SSP1BUF = BQ27541_READ_ADDR;
 	while(BF);
 	while(R_nW);
-
+	
 	//R_nW = 1;
 	while(ACKSTAT);
-
+	
 	SSP1IF = 0;
 	//while(!value_debug1);	//for debug
 	RCEN = 1;	//enable receive
@@ -620,7 +621,7 @@ int i2c_read()		//lfc add remark:don't split i2c_start i2c_ack i2c_stop from i2c
 	//while(interrupt_finished);
 	SSP1IF = 0;
 //receive data twice end
-//	be careful on PEN =1
+//	be careful on PEN =1 
 //	PEN = 1;	//don't stop after i2c read,just when not use i2c any more,can stop it
 //	while(PEN);	//if add SP1IE=1 GIE =1 in i2c_start,maybe it can PEN=1 while(PEN)?
 //lfc add for debug begin
@@ -638,7 +639,7 @@ int i2c_read()		//lfc add remark:don't split i2c_start i2c_ack i2c_stop from i2c
 int bq27541_get(char cmd)
 {
 	int vol_temp_cur = 0;
-
+	
 	asm("clrwdt");
 	i2c_start();
 	i2c_write(cmd);
@@ -663,7 +664,7 @@ void delay_44us();
 #define ADC_NOCHAN	4
 int adc_get(char adc_chan)
 {
-	//RA0 RA1 RA2
+	//RA0 RA1 RA2 
 //step1: PORT config
 	asm("clrwdt");
 	TRISA0 = 1;
@@ -681,7 +682,7 @@ int adc_get(char adc_chan)
 	}
 	else if(adc_chan == 1){	//VBAT on PCB board
 		ADCON0 = 0x05;	//select ADC_CHAN AN1(RA1),turn on ADC
-	}
+	}	
 	else if(adc_chan == 2){	//VBUS VOL
 		ADCON0 = 0x09;	//select ADC_CHAN AN2(RA2),turn on ADC
 	}
@@ -696,7 +697,7 @@ int adc_get(char adc_chan)
 		*/
 		ADFVR1 = 0;	//set FVR 1x output 1.024V
 		ADFVR0 = 1;
-
+		
 		ADCON0 = 0x7D;	//set ADC CHENNEL FVR
 	}
 //step3: ADC interrupt config(optional) skip it
@@ -733,12 +734,15 @@ char vbus_vbatt_detect(void)
 char vol_compare_result(char adc_chan,int adc_value)
 {
 	int low_limit,high_limit;
-	if(adc_chan == 2){
+	if(adc_chan == ADC_RA2){
 		low_limit = 10;		//100mv
 		high_limit = 24;	//200mv
-	} else {
-		low_limit = 27;
-		high_limit = 26;
+	} else if(adc_chan == ADC_RA0){		//RA0 - RA1 > 200mv,need 156/56
+		low_limit = 24;	
+		high_limit = 23;
+	} else if(adc_chan == ADC_RC2){		//RC2 - GND > 200mv,needn't 156/56
+		low_limit = 63;
+		high_limit = 62;
 	}
 	if(adc_value < low_limit)	//(vbus - vbatt) < 100mv
 		return 0;	//vbus too low
@@ -823,7 +827,7 @@ void timer1_init(void)	//25 words
 	T1GCON = 0;	//it maybe deleted later
 	TMR1H = 0;
 	TMR1L = 0;
-	TMR1IF = 0;	//clear timer1 interrupt flag
+	TMR1IF = 0;	//clear timer1 interrupt flag	
 	TMR1IE = 1;
 	PEIE = 1;
 	GIE = 1;
@@ -874,13 +878,13 @@ test code:
 void timer2_test(void)
 {
 	RA2 = 0;
-	TRISA2 = 0;		//set RA2 output
-	LATA2 = 0;
+	TRISA2 = 0;		//set RA2 output	
+	LATA2 = 0;	
 	ANSA2 = 0;		//set RA2 digital I/O
 	timer2_init();
 	TMR2ON = 1;
 	RA2 = 1;	// for test
-	while(1);
+	while(1);	
 }
 
 void timer2_delay_us(char us)
@@ -888,7 +892,7 @@ void timer2_delay_us(char us)
 	//1 instruction cycle = 1/(fosc/4) = 1us
 	//PR2 = us/4;	// postscaler->1:1,prescaler->1:4 : TMR2 add 1,time will add 4 instruction cycle
 	//PR2 = us;	//postscaler->1:1,prescaler->1:1 : TMR2 add 1,time will add 1 instruction cycle
-	//us = PR2 * prescaler * postscaler * (1 instruction cycle) = 255 * 64 * 16 * 1us = 261120us
+	//us = PR2 * prescaler * postscaler * (1 instruction cycle) = 255 * 64 * 16 * 1us = 261120us		
 }
 */
 
@@ -937,7 +941,7 @@ void delay_44us(void)
 	delay_10us();
 	delay_10us();
 	delay_10us();
-	delay_10us();
+	delay_10us();	
 }
 
 void delay_24us(void)
@@ -954,7 +958,7 @@ void delay_20ms(void)	//physical test:20.16ms
 		#asm;
 		NOP;
 		#endasm;
-	}
+	}		
 }
 
 //if i is "int" type,the delay time is 2 times that i is "char" type
@@ -991,7 +995,7 @@ void stop_fastchg_and_tellap(char info)
 	IOCAF5 = 0;
 	IOCAP5 = 0;
 	IOCAN5 = 0;*/
-	//1503_RC5 and 1823_RC5 sometimes conflict when both in output direction,when plugged in and out usb
+	//1503_RC5 and 1823_RC5 sometimes conflict when both in output direction,when plugged in and out usb 
 	set_rc5_input();
 	tx_data_to_ap(info);
 	#asm;
@@ -1003,6 +1007,7 @@ void stop_fastchg_and_tellap(char info)
 #define IS_VOLT_OK				0x02
 #define ASK_CURRENT_LEVEL		0x03
 #define FORBID_OR_ALLOW_FASTCG	0x04
+#define ASK_POWER_BANK			0x05
 #define USB_BAD_CONNECTED		0x09
 
 //lfc add:1823 tx data -> 1503:10100010 bit7 must be 0,it has no meaning
@@ -1046,8 +1051,8 @@ void adapter_commu_with_mcu(void)
 				return ;
 			err_count = 0;
 			adapter_i = 9;
-			set_rc5_output();
-*/
+			set_rc5_output();	
+*/	
 		}else{
 			//lfc:don't use stop_fastchg_and_tellap instead of "RESET" before allow_chg = 1,because if 1503 and ap commu fail,it cost 200ms at least(long long ago:the program will stop here and can't run out of interrupt isr or reset)
 			//stop_fastchg_and_tellap(NOTIFY_FAST_ABSENT);
@@ -1086,13 +1091,13 @@ void adapter_commu_with_mcu(void)
 							RC3 = 1;	//stop fastchg
 							bad_connect = 1;
 						}
-					}else{	//if vbatt < 3350 or vbatt = 0,illegal vbatt,when mcu_buf[3] is 0,adapter will stop charge
+					}else if (bq27541_vbatt < 3000){	//if vbatt < 3000 or vbatt = 0,illegal vbatt,when mcu_buf[3] is 0,adapter will stop charge
 						mcu_buf[3] = 0;
 						//mcu_buf[0] = 0;
 						//mcu_buf[1] = 0;
-						//mcu_buf[2] = 0;
+						//mcu_buf[2] = 0;	
 					}
-					//vbatt = adc_detect_by_fvr(0);	//read RA1 vol	//8 words
+					//vbatt = adc_detect_by_fvr(0);	//read RA1 vol	//8 words	
 				}
 			}
 			RC5 = mcu_buf[mcu_i];
@@ -1124,7 +1129,7 @@ void adapter_commu_with_mcu(void)
 					mcu_buf[4] = 1;
 					mcu_buf[5] = 0;
 				}else if(vbus_detect == 1){	//vbus vol is ok
-					mcu_buf[4] = 1;
+					mcu_buf[4] = 1;	
 					mcu_buf[5] = 1;
 				}else{				//vbus vol is too low
 					mcu_buf[4] = 0;
@@ -1143,7 +1148,7 @@ void adapter_commu_with_mcu(void)
 					RC3 = 0;	//if vbus vol is OK,pull down RC3,start fastchg
 					vbus_detect = 0;	//it maybe deleted later
 				}
-				adapter_mcu_commu = 0;
+				adapter_mcu_commu = 0;	
 			}
 			//reset_before_startchg();
 			break;
@@ -1188,13 +1193,13 @@ void adapter_commu_with_mcu(void)
 				//mcu_buf[1] = 0;
 				//mcu_buf[2] = 1;
 				mcu_buf[3] = allow_chg;	//allow_chg is decided by AP
-				mcu_buf[4] = 0;
+				mcu_buf[4] = 0;	
 				//4A: circuit_res = 4 * (155 + 5 * ((mcu_buf[5] << 4)|(mcu_buf[6] << 3)|(mcu_buf[7] << 2)|(mcu_buf[8] << 1)|mcu_buf[9]))
 				//3A: circuit_res = 3 * (155 + 5 *.....)
 				//2A: circuit_res = 2 * (155 + 5 * ....)
 				mcu_buf[5] = 0;
 				mcu_buf[6] = 1;
-				mcu_buf[7] = 0;
+				mcu_buf[7] = 0;	
 				mcu_buf[8] = 0;
 				mcu_buf[9] = 1;
 			}
@@ -1210,6 +1215,33 @@ void adapter_commu_with_mcu(void)
 				adapter_mcu_commu = 0;
 			}
 			break;
+			
+		case ASK_POWER_BANK:
+			if(!mcu_i){
+				//mcu_buf[0] = 1;
+				//mcu_buf[1] = 0;
+				//mcu_buf[2] = 1;
+				//mcu_buf[3] = 0;
+				mcu_buf[4] = 1;
+				mcu_buf[5] = 0;
+				//mcu_buf[6] = 0;
+				//mcu_buf[7] = 0;
+				//mcu_buf[8] = 0;
+				//mcu_buf[9] = 0;
+			}
+			RC5 = mcu_buf[mcu_i];
+			mcu_i++;
+			if(mcu_i > 9){
+				//if mcu_buf[9] is used,delay_600us is needed
+				delay_600us();
+				set_rc5_input();
+				adapter_i = 0;
+				mcu_i = 0;
+				RC3 = 0;	//start fastchg for power bank
+				adapter_mcu_commu = 0;	
+			}
+			break;
+			
 		case USB_BAD_CONNECTED:	//usb bad connected or adapter reset after unexpect situation
 			RC3 = 1;	//stop fastchg
 			bad_connect = 1;
@@ -1236,8 +1268,8 @@ void adapter_commu_with_mcu(void)
 				mcu_buf[6] = 0;
 				mcu_buf[7] = 0;
 				mcu_buf[8] = 0;
-				mcu_buf[9] = 0;
-			//}
+				mcu_buf[9] = 0;	
+			//}	
 			RC5 = mcu_buf[mcu_i];
 			mcu_i++;
 			if(mcu_i > 9){
@@ -1254,13 +1286,13 @@ void adapter_commu_with_mcu(void)
 			RESET;
 			#endasm;
 			break;
-	}
+	}	
 }
 
 void osc_init(void)
 {
 	OSCCON = 0x68;	//setup FOSC = 4MHz,internal osc
-	//OSCCON = 0x78;	//set up FOSC = 16MHz,internal osc
+	//OSCCON = 0x78;	//set up FOSC = 16MHz,internal osc	
 }
 
 void port_init(void)
@@ -1282,7 +1314,7 @@ void port_init(void)
 	IOCIE = 1;	//enable level interrupt
 	GIE = 1;	//enable global interrupt
 	IOCIF = 0;	//clear level interrupt flag
-*/
+*/	
 	//config RC4(data with ap) output digital I/O low-level
 	ADCON2 = 0;
 	CWG1CON0 = 0;
@@ -1316,9 +1348,9 @@ void port_init(void)
 	CWG1CON1 = 0;
 	CWG1CON2 = 0;
 	RC5 = 0;	//it is must,otherwise RC5 will corrupt randomly in release version
-	LATC5 = 0;	//it is must,otherwise RC5 will corrupt randomly in release version
+	LATC5 = 0;	//it is must,otherwise RC5 will corrupt randomly in release version	
 	TRISC5 = 1;	//set RC5 input
-
+	
 	//config RA5 posedge interrupt trigger
 	//TRISA5 = 1;	//set RA5 input
 	//ANSA5 = 0;	//set RA5 digital I/O
@@ -1339,7 +1371,7 @@ void port_init(void)
 	//TRISC4 = 0;
 	//RC4 = 0;
 	//LATC4 = 0;
-
+	
 	//lfc delete just for debug begin
 	//config RA1 input digital I/O
 /*
@@ -1454,7 +1486,7 @@ void read_write_fw_ver(void)		//60 words
 	PMCON2 = 0XAA;
 	WR = 1;
 	while(WR);
-
+	
 	CFGS = 0;
 	//PMDATH = 0;
 	//PMDATL = 0;
@@ -1490,7 +1522,7 @@ void read_write_fw_ver(void)		//60 words
 	PMCON2 = 0x55;
 	PMCON2 = 0xAA;
 	WR = 1;
-	while(WR);
+	while(WR); 
 
 	PMADRH = 0x00;
 	PMADRL = 0x00;
@@ -1507,12 +1539,12 @@ void read_write_fw_ver(void)		//60 words
 	PMCON2 = 0XAA;
 	WR = 1;
 	while(WR);
-
+	
 	PMADRH = 0x07;
 	PMADRL = 0xFF;
 	RD = 1;	//RD must be after PMADRH/PMADRL
 */
-	//PMDATH PMDATL is the fw_version
+	//PMDATH PMDATL is the fw_version	
 //step1 : read fw_ver
 /*
 	CFGS = 1;
@@ -1568,10 +1600,12 @@ void debug_func(void)
 void fast_charging_detect(void)
 {
 	int vbat_temp_cur = 0;
+	int vddmax = 0;
+	char fast_full_info = 0;
 	char rc = 0;
 	char i = 0;
 	char j = 0;
-
+	
 	TMR1ON = 1;	//enable timer1 to set commu_ap_ornot every 6s
 fast_charging:
 	i++;
@@ -1579,6 +1613,8 @@ fast_charging:
 	delay_20ms();
 	asm("clrwdt");
 
+#if 0	//lfc modify for 10 ~ 20 decigec charge to 4.25V
+/*		
 if(i > 55){
 	bq27541_vbatt = bq27541_get(BQ27541_REG_VOLT);	//250 words	//use bq27541_get can reduce 30 words than use get_batt_vol() get_temp()...
 	if(bq27541_vbatt > 4350){
@@ -1592,6 +1628,29 @@ if(i > 55){
 	i = 0;
 	asm("clrwdt");
 }
+*/
+#else
+if(i > 55){
+	vbat_temp_cur = bq27541_get(BQ27541_REG_TEMP);	//60 words
+	if((vbat_temp_cur < 100) || (vbat_temp_cur > 450)){ //change temp range to 10-45degree
+		stop_fastchg_and_tellap(NOTIFY_TEMP_OVER);
+	} else if(vbat_temp_cur < 150){			// 10 ~ 15 
+		vddmax = 4250;
+		fast_full_info = NOTIFY_FAST_LOW_TEMP_FULL;		
+	} else {								// 15 ~ 45
+		vddmax = 4350;
+		fast_full_info = NOTIFY_FAST_FULL;
+	}
+	
+	bq27541_vbatt = bq27541_get(BQ27541_REG_VOLT);	//250 words	//use bq27541_get can reduce 30 words than use get_batt_vol() get_temp()...
+	if(bq27541_vbatt > vddmax){
+		stop_fastchg_and_tellap(fast_full_info);
+	}
+	i = 0;
+	asm("clrwdt");
+}
+#endif
+
 	//read current every 3s	//lfc modify for battery protected but charge not stop
 	if(j > 150){
 		vbat_temp_cur = bq27541_get(BQ27541_REG_CURRENT);	//it need to cost 1600ms to read current correctly
@@ -1619,7 +1678,7 @@ if(i > 55){
 			#endasm;
 		}
 	}
-	goto fast_charging;
+	goto fast_charging;	
 }
 
 //const int fw_exist @ 0x7ff = 0x3455;
@@ -1629,6 +1688,8 @@ void main(void)
 	pic1503_init();
 	//debug_func();
 	asm("clrwdt");
+#if 0	//lfc delete it for set mcu1503 non-sleep to avoid 1503 dead
+/*
 sleep_ing:
 	#asm;
 	SLEEP;
@@ -1640,7 +1701,9 @@ sleep_ing:
 		goto sleep_ing;
 	}
 	asm("clrwdt");
-	//SSP1IE = 1;	//enable i2c interrupt
+*/
+#endif
+	//SSP1IE = 1;	//enable i2c interrupt 
 /*
 	RA3_int_enable();
 	tell_ap_fw_ver();
@@ -1667,7 +1730,7 @@ sleep_ing:
 		#endasm;
 	}
 */
-	RA4_NCO1_enable();
+	//RA4_NCO1_enable();
 	while(!adapter_request_chg){
 		asm("clrwdt");
 		if(need_to_reset){
@@ -1675,11 +1738,13 @@ sleep_ing:
 			RESET;
 			#endasm;
 		}
-		#asm;
-		NOP;
-		NOP;
-		#endasm;
+		//#asm;
+		//NOP;
+		//NOP;
+		//#endasm;
+		delay_400ms();
 	}
+	RA4_NCO1_enable();
 	RA3_int_enable();
 	rc = tx_data_to_ap(NOTIFY_FAST_PRESENT);
 	if(rc == 1){	//android first power on,tell fw_ver

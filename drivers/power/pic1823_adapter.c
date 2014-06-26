@@ -2,11 +2,11 @@
 **
 ** Copyright (C), 2000-2012, OPPO Mobile Comm Corp., Ltd
 ** All rights reserved.
-**
+** 
 ** VENDOR_EDIT
-**
+** 
 ** Description: fastchg pic16f1503 driver
-**
+** 
 ** from
 ** kernel/drivers/power/pic1503.c
 **
@@ -20,21 +20,21 @@
 ** but WITHOUT ANY WARRANTY; without even the implied warranty of
 ** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ** GNU General Public License for more details.
-**
-**
+** 
+** 
 ** --------------------------- Revision History: --------------------------------
 ** <author>		                      <data> 	<version >  <desc>
 ** ------------------------------------------------------------------------------
 ** liaofuchun@EXP.Driver	  2013/12/22   	1.1	    create file
 ** liaofuchun@EXP.Driver	  2013/12/30 	1.2	    add 3A/2A charging
 ** liaofuchun@EXP.Driver	  2013/01/10 	1.3	    improve 1503 fw update,add battery connection detect,decrease current quickly
-** liaofuchun@EXP.Driver	  2013/01/11 	1.4	    add battery connection detect and battery type
+** liaofuchun@EXP.Driver	  2013/01/11 	1.4	    add battery connection detect and battery type	
 ** liaofuchun@EXP.Driver	  2013/01/21    1.5     add current_level(3A 3.25A 3.5A ... 5A) and circuit_res(20mohm 25mohm .... 80mohm)
 ** liaofuchun@EXP.Driver	  2013/01/23    1.6     optimize code space
 ** liaofuchun@EXP.Driver	  2013/02/14	1.7		iusbmax should be < (2.5A ~ 2.8A) when act as normal adapter,calculate usb circuit resistance every 500mA
 ** ------------------------------------------------------------------------------
  */
-
+ 
  #include <htc.h>
 #define MCP4561_WRITE_ADDR 0x5C
 #define MCP4561_READ_ADDR 0x5D
@@ -50,7 +50,7 @@ char interrupt_finished = 0;
 //char tm2_count = 0;
 //char is_i2c_fail = 0;
 //char tm1_count = 0;
-char uart_data[2] = {0};
+char uart_data[4] = {0};
 char resistor_now = 0;
 //char battery_type = 0;
 char circuit_res = 0;
@@ -72,6 +72,12 @@ void osc_init(void)
 
 void port_init(void)
 {
+	TRISA5 = 0;	//set RA5 output
+	//RA5 = 0;	//lfc del later
+	LATA5 = 0;
+	//RA5 = 0;
+	RA5 = 1;
+	
 	//deinit uart
 	TXSTA = 0X2;
 	SPBRG = 0x0;
@@ -101,10 +107,11 @@ void port_init(void)
 	LATA4 = 0;
 	RA4 = 0;
 
-	TRISA5 = 0;	//set RA5 output
+	//TRISA5 = 0;	//set RA5 output
 	//RA5 = 0;	//lfc del later
-	LATA5 = 0;
-	RA5 = 0;
+	//LATA5 = 0;
+	//RA5 = 0;
+	//RA5 = 1;
 
 	tx_buf[0] = 1;
 	tx_buf[1] = 0;
@@ -170,7 +177,7 @@ void delay_300us(void)
 		#asm;
 		NOP;
 		#endasm;
-	}
+	}	
 }
 
 void delay_500us(void)
@@ -180,7 +187,7 @@ void delay_500us(void)
 		#asm;
 		NOP;
 		#endasm;
-	}
+	}	
 }
 
 void delay_800us(void)
@@ -190,7 +197,7 @@ void delay_800us(void)
 		#asm;
 		NOP;
 		#endasm;
-	}
+	}	
 }
 /*
 void delay_1ms(void)
@@ -209,7 +216,7 @@ void delay_2ms(void)	//physical test:1.96ms
 	for(i =0;i < 240;i++){
 		#asm;
 		NOP;
-		#endasm;
+		#endasm;	
 	}
 }
 
@@ -220,7 +227,7 @@ void delay_2ms(void)	//phycical test:1ms
 	for(i = 222;i > 0;i--){
 		#asm;
 		NOP;
-		#endasm;
+		#endasm;	
 	}
 }
 */
@@ -231,8 +238,8 @@ void delay_1ms(void)		//delay_1ms:physical test->0.98ms
 	for(i = 242;i > 0;i--){
 		#asm;
 		NOP;
-		#endasm;
-	}
+		#endasm;	
+	}	
 }
 
 //physical test:n=2->1.98ms;n=4->3.92ms;n=8->7.7ms;n=20->19.4ms;n=200->198ms
@@ -270,7 +277,7 @@ void delay_2nms(char n)
 	}
 }
 
-void delay_107ms(void)
+void delay_107ms(void)	
 {
 	char i = 0;
 	for(i =0;i < 5;i++){
@@ -299,7 +306,7 @@ void delay_500ms(void)
 
 void enter_bootloader_mode(void)
 {
-	if((uart_data[0] == 0x5a) && (uart_data[1] == 0xd2)){
+	if((uart_data[0] == 0x1d) && (uart_data[1] == 0x05) && (uart_data[2] == 0x14) && (uart_data[3] == 0x08)){
 		GIE = 0;
 		EEPGD = 1;
 		CFGS = 0;
@@ -340,7 +347,7 @@ void enter_bootloader_mode(void)
 		RESET;
 		#endasm;
 	} else if(uart_data[0] == 0x3d) {
-		TXREG = 0x02;//version 0x02
+		TXREG = 0x06;//version 0x06
 		while(!TXIF);
 		delay_1ms();
 		delay_1ms();
@@ -419,7 +426,7 @@ char is_recv_data_legal(char *buf)	//adjust bit0-2
 {
 	if((buf[0]==1) && (buf[1] == 0) && (buf[2] == 1))
 		return 1;
-	return 0;
+	return 0;		
 }
 
 void tell_mcu_get_volt(void)
@@ -462,7 +469,7 @@ int get_batt_vol(char *buf)
 		vol = vol * 16 + 3404;	//mistake 8mv
 		return vol;
 	}
-	return 0;
+	return 0;			
 }
 
 void ask_mcu_is_vbus_ok(void)
@@ -474,7 +481,7 @@ void ask_mcu_is_vbus_ok(void)
 	tx_buf[6] = 0;
 	//tx_buf[7] = 0;
 	//set_rc5_output();
-	adapter_tx_data(tx_buf);
+	adapter_tx_data(tx_buf);	
 }
 
 //char value_debug1 = 5;
@@ -618,6 +625,7 @@ void ask_mcu_current_level(void)
 }
 
 #define CURRENT_MIN_3000MA		980		//3000/3.06
+#define CURRENT_MIN_3150MA		1029	//3150/3.06
 #define CURRENT_ATTACH_250MA	82		//250/3.06 = 82
 #define CURRENT_ATTACH_300MA	98
 
@@ -642,7 +650,7 @@ char get_mcu_current_level(char *buf)
 	current_level = buf[7] << 2;
 	current_level = current_level | (buf[8] << 1);
 	current_level = current_level | buf[9];
-
+ 
 	//if(buf[3] || buf[4] || buf[5] || buf[6]){
 	//the codes as following can reduce 2 words than the codes above
 	if((buf[3] == 1) || (buf[4] == 1) || (buf[5] == 1) || (buf[6] == 1)){
@@ -652,7 +660,8 @@ char get_mcu_current_level(char *buf)
 	}
 
 	//current_low = CURRENT_MIN + (current_level * 250)/3.06 = CURRENT_MIN + current_level * 82
-	current_level_low = CURRENT_MIN_3000MA + (current_level * CURRENT_ATTACH_250MA);
+	//current_level_low = CURRENT_MIN_3000MA + (current_level * CURRENT_ATTACH_250MA);
+	current_level_low = CURRENT_MIN_3150MA + (current_level * CURRENT_ATTACH_250MA);
 	current_level_high = current_level_low + CURRENT_ATTACH_300MA;
 	return 1;
 }
@@ -685,9 +694,9 @@ char ask_adjust_vbus(void)
 				#asm;
 				RESET;
 				#endasm;
-			//}
+			//}	
 		}
-	}
+	}	
 }
 
 /*
@@ -723,13 +732,13 @@ void start_fastchg(void)
 					RA4 = 0; //pull down vbus
 					//when adapter plugged out,vbus will be 5.1V,the commu between adapter and 1503 will fail
 					//don't commu with 1503 here
-					//tell_mcu_usb_badconnect();
+					//tell_mcu_usb_badconnect();	
 					//get_mcu_usb_badconnect(rx_buf);
 					//while(1);	//just for debug
 					#asm;	//usb plugged out,reset device
 					RESET;
-					#endasm;
-				}
+					#endasm;	
+				}	
 			}else{	//get vbat fail,reset device
 				//while(1);	//just for debug
 				#asm;
@@ -743,7 +752,7 @@ void start_fastchg(void)
 			#asm;
 			RESET;
 			#endasm;
-		}
+		}	
 		delay_20ms();
 	}
 	value_debug = 5;
@@ -753,11 +762,12 @@ void start_fastchg(void)
 //#define CURRENT_1500MA		490
 //#define	CURRENT_1000MA		327
 #define CURRENT_500MA		164
-#define CURRENT_1750MA		572
-
+#define CURRENT_1750MA		572		
+	
 void start_fastchg(void)
 {
-	char rc = 0;
+	
+    char rc = 0;
 	int vbat,vbus;	//vbus must be int type,not unsigned int type
 	char twoA = 0;
 	char threeA = 0;
@@ -765,7 +775,7 @@ void start_fastchg(void)
 	int vol_limit = 800;
 	char skip_count = 0;
 	int vol_limit_base = 200;
-	char ask_current_count = 0;
+	char ask_current_count = 0; 
 
 	ask_mcu_current:
 		asm("clrwdt");
@@ -796,6 +806,7 @@ void start_fastchg(void)
 				skip_count++;
 				goto adjust_current;
 			}
+                        RA5=0;
 			skip_count = 0;
 			vbus = adc_get(ADC_RA2,0);
 			vbus = (vbus - CURRENT_1750MA)/CURRENT_500MA;
@@ -813,7 +824,7 @@ void start_fastchg(void)
 					RA4 = 0; //pull down vbus
 					//when adapter plugged out,vbus will be 5.1V,the commu between adapter and 1503 will fail
 					//don't commu with 1503 here
-					tell_mcu_usb_badconnect();
+					tell_mcu_usb_badconnect();	
 					RC4 = 0;
 					delay_10us();
 					RC4 = 1;
@@ -823,9 +834,9 @@ void start_fastchg(void)
 					#asm;	//usb plugged out,reset device
 					RESET;
 					#endasm;
-				}
+				} 
 			} else {
-				ovp_count = 0;
+				ovp_count = 0; 
 			}
 			adjust_current:
 				//delay_20ms();	//it is must,delete it 110ms
@@ -844,12 +855,12 @@ void start_fastchg(void)
 						current_set(1307,1405);	//4A
 					*/
 				} else if((vbat > 4299) && (vbat < 4321)){
-					threeA = 1;
+					threeA = 1;	
 					current_set(980,1078,FASTCHG_STARTED);	//3A
 				} else if(vbat > 4320){
 					twoA = 1;
 					current_set(654,752,FASTCHG_STARTED);	//2A
-				}
+				}		 
 		}else{	//get vbat fail,reset device
 				//while(1);	//just for debug
 			#asm;
@@ -887,7 +898,6 @@ char commu_with_mcu(void)
 			}*/
 			if(circuit_res == FiveV_5A_MODE) {
 				resistor_set(255);
-
 				while(1) {
 					asm("clrwdt");
 					ask_mcu_fastchg_ornot();
@@ -902,10 +912,12 @@ char commu_with_mcu(void)
 					}
 				}
 			} else {
-				resistor_set(150);
+                RA5=1;
+                delay_nms(20);
+				resistor_set(200);
 				rc = ask_adjust_vbus();
 				if(rc){
-					start_fastchg();
+					start_fastchg();                    
 					return 0;	//ap allow to start fastchg
 				}
 				else{
@@ -915,7 +927,7 @@ char commu_with_mcu(void)
 					//goto startchg_ornot;
 				}
 			}
-
+			
 		}
 		return 1;	//ap forbid to startchg or cmmu fail
 		/*
@@ -925,7 +937,7 @@ char commu_with_mcu(void)
 			delay_800ms();
 			goto startchg_ornot;
 		}
-		*/
+		*/		
 }
 
 /*************i2c master mode function begin***********/
@@ -943,7 +955,7 @@ void interrupt isr(void)	//void interrupt **** is the entrance for all the inter
 		RCIF = 0;
 		uart_data[i] = RCREG;
 		i++;
-		if(i > 1)
+		if(i > 3)
 			i = 0;
 		enter_bootloader_mode();
 	}
@@ -966,7 +978,7 @@ void interrupt isr(void)	//void interrupt **** is the entrance for all the inter
 			commu_with_mcu();
 			//TMR2ON = 0;	//disable timer
 			//TMR2ON = 1;
-
+		
 		}
 		*/
 	//}
@@ -975,18 +987,18 @@ void interrupt isr(void)	//void interrupt **** is the entrance for all the inter
 		TMR1IF = 0;
 		tm1_count++;
 		if(tm1_count > 9){	//delay_time = 0.524 * 10 = 5.24s
-	//	if(tm1_count > 19){	//delay_time = 0.524 * 20 = 10.48s
+	//	if(tm1_count > 19){	//delay_time = 0.524 * 20 = 10.48s	
 			tm1_count = 0;
 			if(is_i2c_fail){
 				tell_mcu_usb_badconnect();
 				#asm;
 				RESET;
 				#endasm;
-			}
+			}	
 		}
 	}
 */
-	return ;
+	return ;	
 }
 
 void timer1_init(void)	//1 cycle delay_time = 65536us * 8 = 524.28ms
@@ -1030,7 +1042,7 @@ int i2c_init()
 	TRISC0 = 1;	//set RC0 input
 	TRISC1 = 1;	//set RC1 input
 	LATC1 = 0;
-
+	
 	//initial hardware begin
 	SSP1CON1 = 0x00;
     SSP1CON2 = 0x00;
@@ -1091,7 +1103,7 @@ void i2c_ack(void)
 void i2c_noack(void)
 {
 	ACKDT = 1;
-	ACKEN = 0;
+	ACKEN = 0;	
 }
 void delay_40us();
 void i2c_write(char reg_addr)
@@ -1109,7 +1121,7 @@ void i2c_write(char reg_addr)
 	//value_debug = SSP1IF;	//just for debug,test whether PIC1503 set SSP1IF after 9th clk(set to 1 is ok)
 	SSP1BUF = reg_addr;
 	while(BF);
-	while(ACKSTAT);
+	while(ACKSTAT);	
 	asm("clrwdt");
 }
 
@@ -1117,7 +1129,7 @@ void i2c_write(char reg_addr)
 int i2c_read()		//lfc add remark:don't split i2c_start i2c_ack i2c_stop from i2c_read,maybe something wrong will happen
 {
 	int retval;
-
+	
 	RSEN = 1;
 	while(RSEN);
 //	while(!SSP1IF);
@@ -1126,10 +1138,10 @@ int i2c_read()		//lfc add remark:don't split i2c_start i2c_ack i2c_stop from i2c
 	SSP1BUF = MCP4561_SLAVE_ADDR;
 	while(BF);
 	while(R_nW);
-
+	
 	//R_nW = 1;
 	while(ACKSTAT);
-
+	
 	//while(!allow_to_rx);
 	//allow_to_rx = 0;
 	SSP1IF = 0;
@@ -1170,7 +1182,7 @@ int i2c_read()		//lfc add remark:don't split i2c_start i2c_ack i2c_stop from i2c
 	//while(interrupt_finished);
 	SSP1IF = 0;
 //receive data twice end
-//	be careful on PEN =1
+//	be careful on PEN =1 
 //	PEN = 1;	//don't stop after i2c read,just when not use i2c any more,can stop it
 //	while(PEN);	//if add SP1IE=1 GIE =1 in i2c_start,maybe it can PEN=1 while(PEN)?
 //lfc add for debug begin
@@ -1202,7 +1214,7 @@ void i2c_write_send(char reg_addr,char data)
 	interrupt_finished = 1;
 	SSP1BUF = reg_addr;
 	while(BF);
-	while(ACKSTAT);
+	while(ACKSTAT);	
 	while(interrupt_finished);
 	asm("clrwdt");
 	//send data to mcp4561
@@ -1280,7 +1292,7 @@ void vbus_set_secondary(int adc_value)
 	//vol district by two resistors
 	//vbus = (vbus * 11)/14 + (2 * vbus);	//it is needed when calculate vol not adc_value
 	//value_debug = vbus;
-
+	
 	//vbus_lowthreshold = ((vol-100) * 56)/156
 	//while((vbus < (vol - 100)) || (vbus > (vol + 100))){
 	while((vbus < (adc_value - 36)) || (vbus > (adc_value + 36))){
@@ -1315,7 +1327,7 @@ void vbus_set_secondary(int vol)
 	//vol district by two resistors
 	vbus = (vbus * 11)/14 + (2 * vbus);
 	//value_debug = vbus;
-
+	
 	//vbus_lowthreshold = ((vol-100) * 56)/156
 	while((vbus < (vol - 100)) || (vbus > (vol + 100))){
 		asm("clrwdt");
@@ -1368,7 +1380,7 @@ int adc_get(char adc_chan,char delay_long)
 	ANSA1 = 1;
 	TRISA2 = 1;	//set RA2 input
 	ANSA2 = 1;	//set RA2 analog input
-	TRISC2 = 1;
+	TRISC2 = 1;	
 	ANSC2 = 1;
 	TRISC3 = 1;
 	ANSC3 = 1;
@@ -1449,7 +1461,7 @@ void current_set(void)	//80 words	//4050ma
 			resistor_decrease();
 			//delay_2ms();
 		}
-
+		
 		delay_2ms();
 		delay_2ms();
 		delay_2ms();
@@ -1482,7 +1494,7 @@ void uart_init(void)	//just for enter bootloader mode
 	//config RC5 input digital I/O
 	//ANSC5 = 0;
 	//ANSC4 = 0;		//set RC4 digital I/O
-	TRISC5 = 1;		//set RC5 input
+	TRISC5 = 1;		//set RC5 input	
 	TRISC4 = 0;		//set RC4 ouput
 	RXDTSEL = 0;	//set RC5 RX/DT func
 	TXCKSEL = 0;	//set RC4 TX/CK	func
@@ -1500,20 +1512,21 @@ void uart_init(void)	//just for enter bootloader mode
 //#define SAFE_CURRENT_MAX	1634	//5A
 #define SAFE_CURRENT_MAX	1699	//5.2A	//ok
 //#define		SAFE_CURRENT_MAX	1797	//5.5A
+
 void is_vbus_short(char is_fastchg)
 {
 	static char check_count = 0;
-	if(adc_get(ADC_RC2,0) < 1077){	//detect vbus vol < 3V
+	if(adc_get(ADC_RC2,0) < 1221){	//detect vbus vol < 3V
 		//fastchg not started,act as normal adapter,check 20ms * 10 = 200ms
-		if(!is_fastchg && (check_count < 10)){
+		if(!is_fastchg && (check_count < 15)){
 			check_count++;
-			return ;
+			return ;	
 		}
 		//RA4 = 0;
 		SWDTEN = 0;	//disable wdt
-		resistor_set(0);
+		resistor_set(200);
+        RA5 = 1;
 		delay_nms(50);
-		RA5 = 1;
 		RA4 = 0;
 		//SWDTEN = 0;	//disable wdt
 		//resistor_set(0);
@@ -1534,7 +1547,7 @@ void current_set(int current_low,int current_high,char is_fastchg)	//80 words	//
 	static char slow_increase_count = 0;	//it must be static type
 	static char slow_increase = 0;	//it must be static type
 	asm("clrwdt");
-
+	
 	is_vbus_short(is_fastchg);
 	cur_vbus = adc_get(ADC_RA2,0);
 	if((cur_vbus < current_low) || (cur_vbus > current_high)){	//3.7A~4A
@@ -1557,23 +1570,23 @@ void current_set(int current_low,int current_high,char is_fastchg)	//80 words	//
 				}else if(slow_increase > 40){
 					resistor_increase();
 				}
-			} else {
+			} else {	
 				//if fastchg not started,increase voltage quickly and don't delay 20ms in quickly_decrease_current;
 				//if(adc_get(ADC_RC3,0) > 1794){	//5V
 				if(adc_get(ADC_RC3,0) > 1831){		//5.1V
 					goto detect_vbus;
 				}
 				resistor_increase();
-			}
+			}	
 		} else if(cur_vbus > current_high){
 			//is_vbus_short();
-			resistor_decrease();
-		}
-	}
+			resistor_decrease();	
+		} 
+	} 
 	quickly_decrease_current:
 		check_count++;
 		cur_vbus = adc_get(ADC_RA2,1);
-		if(cur_vbus > SAFE_CURRENT_MAX){
+		if(cur_vbus > SAFE_CURRENT_MAX){				
 			resistor_set(resistor_now - 9);
 			is_vbus_short(is_fastchg);
 			//delay_2nms(10 - check_count);
@@ -1625,17 +1638,21 @@ void main(void)
 	delay_nms(200);
 	delay_nms(200);
 	delay_nms(200);
+	RA5 = 0;
 	//detect vbus_end(rc3) > 2V ?
+#if 0
+/* jingchun.wang@Onlinerd.Driver, 2014/03/04  Delete for ttt */
 	do{
 		asm("clrwdt");
 		delay_nms(2);
 		vbus_end_cur = adc_get(ADC_RC3,0);
-		//vbus_end_cur = (vbus_end_cur * 11)/14 + (2 * vbus_end_cur);
+		//vbus_end_cur = (vbus_end_cur * 11)/14 + (2 * vbus_end_cur);	
 	}while(vbus_end_cur > 718);		//vbus_end_cur > 2V
+#endif /*CONFIG_VENDOR_EDIT*/
 
 	//vbus_set_secondary(5150);
 	//vbus_set_secondary(1849);	//1849 * 156 / 56 = 5150mV
-
+	
 	//if vbus_end < 2V,pull up RA4
 	RA4 = 1;
 	//delay_800ms();
@@ -1644,7 +1661,7 @@ detect_current:
 	asm("clrwdt");
 	//set current:2500mA ~ 2800mA
 	//if current can't acheive it,vbus vol will be 5100mv
-	current_set(817,915,FASTCHG_NOTSTARTED);
+	current_set(817,915,FASTCHG_NOTSTARTED);	
 	delay_nms(20);
 	vbus_end_cur = adc_get(ADC_RA2,0);	//detect RA2 vol
 	if(vbus_end_cur < 326){	//current < 1A
@@ -1661,7 +1678,7 @@ detect_current:
 	//} else if(vbus_end_cur > 1820){		//current > 5.4A
 		//oip_count++;
 		//if(oip_count < 50)	//count = 50 is not enough for 14001
-		//	goto detect_current;
+		//	goto detect_current;	
 		RA4 = 0;
 		RA5 = 1;
 		SWDTEN = 0;	//disable wdt
@@ -1683,6 +1700,6 @@ detect_current:
 			delay_nms(80);
 			goto detect_current;
 		}
-	}
+	}	
 	while(1);
 }

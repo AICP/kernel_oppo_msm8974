@@ -23,6 +23,11 @@
 #include "mdss_fb.h"
 #include "mdss_mdp.h"
 
+#ifdef VENDOR_EDIT
+/* Xiaori.Yuan@Mobile Phone Software Dept.Driver, 2014/04/11  Add for blue screen before recovery mode */
+#include <linux/boot_mode.h>
+#endif /*VENDOR_EDIT*/
+
 /* OPPO 2014-02-11 yxq add begin for Find7S */
 #include <linux/pcb_version.h>
 /* OPPO 2014-02-11 yxq add end */
@@ -1351,6 +1356,11 @@ static int mdss_mdp_ctl_setup_wfd(struct mdss_mdp_ctl *ctl)
 	return 0;
 }
 
+#ifdef VENDOR_EDIT
+/* Xiaori.Yuan@Mobile Phone Software Dept.Driver, 2014/04/15  Add for find7s swap DSI port */
+extern int LCD_id;
+#endif /*VENDOR_EDIT*/
+
 struct mdss_mdp_ctl *mdss_mdp_ctl_init(struct mdss_panel_data *pdata,
 				       struct msm_fb_data_type *mfd)
 {
@@ -1377,10 +1387,25 @@ struct mdss_mdp_ctl *mdss_mdp_ctl_init(struct mdss_panel_data *pdata,
 		break;
 	case MIPI_VIDEO_PANEL:
 		ctl->is_video_mode = true;
+#ifndef VENDOR_EDIT
+/* Xiaori.Yuan@Mobile Phone Software Dept.Driver, 2014/04/15  Modify for find7s swap DSI port */
 		if (pdata->panel_info.pdest == DISPLAY_1)
 			ctl->intf_num = MDSS_MDP_INTF1;
 		else
 			ctl->intf_num = MDSS_MDP_INTF2;
+#else /*VENDOR_EDIT*/
+		if(get_pcb_version()>=22 || LCD_id == 4){
+			if (pdata->panel_info.pdest == DISPLAY_1)
+				ctl->intf_num = MDSS_MDP_INTF2;
+			else
+				ctl->intf_num = MDSS_MDP_INTF1;
+		}else{
+			if (pdata->panel_info.pdest == DISPLAY_1)
+				ctl->intf_num = MDSS_MDP_INTF1;
+			else
+				ctl->intf_num = MDSS_MDP_INTF2;
+		}
+#endif /*VENDOR_EDIT*/
 		ctl->intf_type = MDSS_INTF_DSI;
 		ctl->opmode = MDSS_MDP_CTL_OP_VIDEO_MODE;
 		ctl->start_fnc = mdss_mdp_video_start;

@@ -1276,7 +1276,7 @@ static int msm_cpp_cfg(struct cpp_device *cpp_dev,
 		&buff_mgr_info);
 	if (rc < 0) {
 		rc = -EAGAIN;
-		pr_debug("error getting buffer rc:%d\n", rc);
+		pr_err("error getting buffer rc:%d,at %d\n", rc, __LINE__);
 		goto ERROR2;
 	}
 	new_frame->output_buffer_info[0].index = buff_mgr_info.index;
@@ -1307,7 +1307,7 @@ static int msm_cpp_cfg(struct cpp_device *cpp_dev,
 			&dup_buff_mgr_info);
 		if (rc < 0) {
 			rc = -EAGAIN;
-			pr_debug("error getting buffer rc:%d\n", rc);
+			pr_err("error getting buffer rc:%d, at %d\n", rc, __LINE__);
 			goto ERROR3;
 		}
 		new_frame->output_buffer_info[1].index =

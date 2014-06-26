@@ -100,12 +100,28 @@ static irqreturn_t ngd_slim_interrupt(int irq, void *d)
 	u32 stat = readl_relaxed(ngd + NGD_INT_STAT);
 	u32 pstat;
 
+/* OPPO 2014-03-26 Zhaoan.Xu@PhoneSW.Driver Modify begin for sound card can't register */
+#ifndef VENDOR_EDIT
 	if (stat & NGD_INT_TX_MSG_SENT) {
 		writel_relaxed(NGD_INT_TX_MSG_SENT, ngd + NGD_INT_CLR);
 		/* Make sure interrupt is cleared */
+#else
+    if ((stat & NGD_INT_MSG_BUF_CONTE) ||
+        (stat & NGD_INT_MSG_TX_INVAL) || (stat & NGD_INT_DEV_ERR) ||
+        (stat & NGD_INT_TX_NACKED_2)) {
+        writel_relaxed(stat, ngd + NGD_INT_CLR);
+        dev->err = -EIO;
+
+        dev_err(dev->dev, "NGD interrupt error:0x%x, err:%d", stat,
+        					dev->err);
+        /* Guarantee that error interrupts are cleared */
+#endif
+/* OPPO 2014-03-26 Zhaoan.Xu@PhoneSW.Driver Modify end */
 		mb();
 		if (dev->wr_comp)
 			complete(dev->wr_comp);
+/* OPPO 2014-03-26 Zhaoan.Xu@PhoneSW.Driver Modify begin for sound card not registered */
+#ifndef VENDOR_EDIT
 	} else if ((stat & NGD_INT_MSG_BUF_CONTE) ||
 		(stat & NGD_INT_MSG_TX_INVAL) || (stat & NGD_INT_DEV_ERR) ||
 		(stat & NGD_INT_TX_NACKED_2)) {
@@ -119,6 +135,15 @@ static irqreturn_t ngd_slim_interrupt(int irq, void *d)
 		if (dev->wr_comp)
 			complete(dev->wr_comp);
 		}
+#else
+	} else if (stat & NGD_INT_TX_MSG_SENT) {
+    	writel_relaxed(NGD_INT_TX_MSG_SENT, ngd + NGD_INT_CLR);
+    	/* Make sure interrupt is cleared */
+    	mb();
+    	if (dev->wr_comp)
+    		complete(dev->wr_comp);
+#endif
+/* OPPO 2014-03-26 Zhaoan.Xu@PhoneSW.Driver Modify end */
 	}
 	if (stat & NGD_INT_RX_MSG_RCVD) {
 		u32 rx_buf[10];

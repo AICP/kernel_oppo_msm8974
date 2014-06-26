@@ -292,8 +292,6 @@ struct mdp3_dma {
 
 	int (*histo_op)(struct mdp3_dma *dma, u32 op);
 
-	void (*config_stride)(struct mdp3_dma *dma, int stride);
-
 	void (*vsync_enable)(struct mdp3_dma *dma,
 			struct mdp3_notification *vsync_client);
 

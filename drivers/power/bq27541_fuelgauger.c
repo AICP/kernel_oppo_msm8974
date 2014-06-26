@@ -1037,6 +1037,7 @@ static irqreturn_t irq_rx_handler(int irq, void *dev_id)
 }
 
 #define AP_SWITCH_USB	GPIO_CFG(96, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA)
+
 static void fastcg_work_func(struct work_struct *work)
 {
 	int data = 0;
@@ -1133,7 +1134,8 @@ static void fastcg_work_func(struct work_struct *work)
 		soc = bq27541_get_battery_soc();
 		current_now = bq27541_get_average_current();
 		pr_err("%s volt:%d,temp:%d,remain_cap:%d,soc:%d,current:%d\n",__func__,volt,temp,
-			remain_cap,soc,current_now);
+			remain_cap,soc,current_now);	
+		
 		//don't read
 		bq27541_di->alow_reading = false;
 		mod_timer(&bq27541_di->watchdog,
@@ -1319,8 +1321,6 @@ out:
 		power_supply_changed(bq27541_di->batt_psy);
 		wake_unlock(&bq27541_di->fastchg_wake_lock);
 	}
-	
-	
 }
 
 void di_watchdog(unsigned long data)

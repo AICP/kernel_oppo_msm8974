@@ -26,6 +26,12 @@
 #include "mdss_panel.h"
 #include "mdss_dsi.h"
 #include "mdss_debug.h"
+
+#ifdef VENDOR_EDIT
+/* Xiaori.Yuan@Mobile Phone Software Dept.Driver, 2014/04/11  Add for AT current for find7s */
+#include <linux/boot_mode.h>
+#endif /*VENDOR_EDIT*/
+
 /* OPPO 2014-02-10 yxq Added begin for Find7S */
 #include <linux/pcb_version.h>
 /* OPPO 2014-02-10 yxq Added end */
@@ -86,6 +92,8 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable)
 
 		mdss_dsi_panel_reset(pdata, 0);
 
+#ifndef VENDOR_EDIT
+/* Xiaori.Yuan@Mobile Phone Software Dept.Driver, 2014/04/02  Modify for probabilistic blurred screen for find7s */
 		ret = msm_dss_enable_vreg(
 			ctrl_pdata->power_data.vreg_config,
 			ctrl_pdata->power_data.num_vreg, 0);
@@ -93,6 +101,20 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable)
 			pr_err("%s: Failed to disable vregs.rc=%d\n",
 				__func__, ret);
 		}
+#else /*VENDOR_EDIT*/
+	if(get_pcb_version() >= HW_VERSION__20 && get_boot_mode()!= MSM_BOOT_MODE__FACTORY){
+		ret = 0;
+	}
+	else{
+		ret = msm_dss_enable_vreg(
+			ctrl_pdata->power_data.vreg_config,
+			ctrl_pdata->power_data.num_vreg, 0);
+		if (ret) {
+			pr_err("%s: Failed to disable vregs.rc=%d\n",
+				__func__, ret);
+		}
+	}
+#endif /*VENDOR_EDIT*/
 	}
 error:
 	return ret;
@@ -855,101 +877,20 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 	return rc;
 }
 
-//yanghai modify for cmd panel patch
-#ifdef CONFIG_VENDOR_EDIT
-#define panel_id_gpio 27
-static int get_pannel_product(void)
-{
-	int rc;
-
-			rc = gpio_request(panel_id_gpio, "disp_ID");
-		if (rc) {
-			pr_err("yanghai request ID gpio failed, rc=%d\n",
-			       rc);
-			gpio_free(panel_id_gpio);
-			return -ENODEV;
-		}
-		rc = gpio_tlmm_config(GPIO_CFG(
-				panel_id_gpio, 0,
-				GPIO_CFG_INPUT,
-				GPIO_CFG_PULL_DOWN,
-				GPIO_CFG_2MA),
-				GPIO_CFG_ENABLE);
-
-		if (rc) {
-			pr_err("%s: unable to ID config tlmm = 27\n",
-				__func__);
-			gpio_free(panel_id_gpio);
-			return -ENODEV;
-		}
-
-		rc = gpio_direction_input(panel_id_gpio);
-		if (rc) {
-			pr_err("set_direction for display ID GPIO failed, rc=%d\n",
-			       rc);
-			gpio_free(panel_id_gpio);
-			return -ENODEV;
-		}
-//red pin value
-		if (gpio_is_valid(panel_id_gpio))
-			rc=gpio_get_value(panel_id_gpio);
-				pr_info("%s:pannel id==%d \n",
-						__func__,rc);
-			return rc;
-}
-
-#endif
-//yanghai modify end
-
 static struct device_node *mdss_dsi_pref_prim_panel(
 		struct platform_device *pdev)
 {
 	struct device_node *dsi_pan_node = NULL;
 
-/* OPPO 2013-11-05 yxq Add begin for compatible with truly panel */
-    int rc = 0;
-/* OPPO 2013-11-05 yxq Add end */
-
 	pr_debug("%s:%d: Select primary panel from dt\n",
 					__func__, __LINE__);
-
-/* OPPO 2013-11-06 yxq Modify begin for compatible with truly panel */
-#ifndef CONFIG_VENDOR_EDIT
 	dsi_pan_node = of_parse_phandle(pdev->dev.of_node,
 					"qcom,dsi-pref-prim-pan", 0);
-#else
-        if (get_pcb_version() < HW_VERSION__20) { /* For Find7 */
-            rc = get_pannel_product();
-            pr_err("%s yxq rc=%d\n", __func__, rc);
-            if (rc == 0) {
-/* OPPO 2013-11-20 yxq Modify begin for reason */
-#ifndef COMMAND_MODE_ENABLE
-                dsi_pan_node = of_parse_phandle(
-                    pdev->dev.of_node,
-                    "qcom,dsi-pref-jdi-video-pan", 0);
-#else
-                dsi_pan_node = of_parse_phandle(
-                    pdev->dev.of_node,
-                    "qcom,dsi-pref-jdi-cmd-pan", 0);
-#endif
-/* OPPO 2013-11-20 yxq Modify end */
-            } else {
-                dsi_pan_node = of_parse_phandle(
-                    pdev->dev.of_node,
-                    "qcom,dsi-pref-truly-pan", 0);
-            }
-        } else { /* For Find7S */
-            dsi_pan_node = of_parse_phandle(
-                pdev->dev.of_node,
-                "qcom,dsi-pref-find7s-jdi-pan", 0);
-        }
-#endif
 	if (!dsi_pan_node)
 		pr_err("%s:can't find panel phandle\n", __func__);
 
 	return dsi_pan_node;
 }
-
 
 /**
  * mdss_dsi_find_panel_of_node(): find device node of dsi panel
@@ -976,12 +917,6 @@ static struct device_node *mdss_dsi_find_panel_of_node(
 	struct device_node *dsi_pan_node = NULL, *mdss_node = NULL;
 
 	len = strlen(panel_cfg);
-#ifdef CONFIG_VENDOR_EDIT
-/* Xinqin.Yang@PhoneSW.Driver, 2014/02/10  Add for Find7s */
-    if (get_pcb_version() >= HW_VERSION__20) {
-        len = 0;
-    }
-#endif /*CONFIG_VENDOR_EDIT*/
 	if (!len) {
 		/* no panel cfg chg, parse dt */
 		pr_debug("%s:%d: no cmd line cfg present\n",
@@ -1410,7 +1345,8 @@ ctrl_pdata->index=index;
 /* Xiaori.Yuan@Mobile Phone Software Dept.Driver, 2014/03/13  Add for Find7s enable display -5v */
 	if(get_pcb_version() >= HW_VERSION__20){
 		if(gpio_is_valid(46)){
-
+			pr_err("config gpio 46 LCD -5v \n");
+			rc = gpio_request(46, "LCD_enable_-5v");
 			rc = gpio_tlmm_config(GPIO_CFG(
 					46, 0,
 					GPIO_CFG_OUTPUT,
