@@ -1302,17 +1302,15 @@ static ssize_t synaptics_rmi4_gesture_store(struct device *dev,
 
 	if (input == 21 || input == 1) {
 		atomic_set(&syna_rmi4_data->syna_use_gesture, 1);
-		synaptics_enable_gesture(syna_rmi4_data,true);
-	}
-	else if (input == 20 || input == 0) {
-		synaptics_enable_gesture(syna_rmi4_data,false);
-	}
-	else
+		synaptics_enable_gesture(syna_rmi4_data, true);
+	} else if (input == 20 || input == 0) {
+		atomic_set(&syna_rmi4_data->syna_use_gesture, 0);
+		synaptics_enable_gesture(syna_rmi4_data, false);
+	} else
 		return -EINVAL;
 
 	return count;
 }
-
 
 //support tp2.0 interface, app read it to get points
 static int synaptics_rmi4_crood_read(char *page, char **start, off_t off,
@@ -2444,9 +2442,10 @@ static unsigned char synaptics_rmi4_update_gesture2(unsigned char *gesture,unsig
 
 	switch(gesture[0]) {
 		case SYNA_ONE_FINGER_CIRCLE:
-			gesturemode = Circle ;
-			keyvalue = KEY_GESTURE_CIRCLE;
-			break ;
+			gesturemode = Circle;
+			if (atomic_read(&syna_rmi4_data->camera_enable))
+				keyvalue = KEY_GESTURE_CIRCLE;
+			break;
 
 		case SYNA_TWO_FINGER_SWIPE:
 			gesturemode = 
@@ -2463,35 +2462,38 @@ static unsigned char synaptics_rmi4_update_gesture2(unsigned char *gesture,unsig
 				if(abs(points[3] - points[1]) <= 800)
 					gesturemode=UnkownGestrue;
 			}
-
-			if(gesturemode!=UnkownGestrue)	{  
-				keyvalue = KEY_GESTURE_SWIPE_DOWN;
-			} 
-
-			break ;
+			if (gesturemode == DouSwip) {
+				if (atomic_read(&syna_rmi4_data->music_enable))
+					keyvalue = KEY_GESTURE_SWIPE_DOWN;
+			}
+			break;
 
 		case SYNA_ONE_FINGER_DOUBLE_TAP:
-			gesturemode = DouTap ;
-			keyvalue = KEY_DOUBLE_TAP;
-			break ;
+			gesturemode = DouTap;
+			if (atomic_read(&syna_rmi4_data->double_tap_enable))
+				keyvalue = KEY_DOUBLE_TAP;
+			break;
 
 		case SYNA_ONE_FINGER_DIRECTION:
 			switch(gesture[2]){
 				case 0x01:  //UP
-					gesturemode = DownVee ;
+					gesturemode = DownVee;
 					keyvalue = KEY_GESTURE_V;
 					break;
 				case 0x02:  //DOWN
-					gesturemode = UpVee ;
-					keyvalue = KEY_GESTURE_V;
+					gesturemode = UpVee;
+					if (atomic_read(&syna_rmi4_data->flashlight_enable))
+						keyvalue = KEY_GESTURE_V;
 					break;
 				case 0x04:  //LEFT
-					gesturemode = RightVee ;
-					keyvalue = KEY_GESTURE_LTR;
+					gesturemode = RightVee;
+					if (atomic_read(&syna_rmi4_data->music_enable))
+						keyvalue = KEY_GESTURE_LTR;
 					break;
 				case 0x08:  //RIGHT
-					gesturemode = LeftVee ;
-					keyvalue = KEY_GESTURE_GTR;
+					gesturemode = LeftVee;
+					if (atomic_read(&syna_rmi4_data->music_enable))
+						keyvalue = KEY_GESTURE_GTR;
 					break;
 			}
 			break;
@@ -3924,19 +3926,18 @@ static void synaptics_rmi4_set_params(struct synaptics_rmi4_data *rmi4_data)
 
 	rmi = &(rmi4_data->rmi4_mod_info);
 
-	//synaptics_set_f12ctrl_data(rmi4_data,0,5);
-
 	set_bit(KEY_BACK, rmi4_data->input_dev->keybit);
 	set_bit(KEY_MENU, rmi4_data->input_dev->keybit);
 	set_bit(KEY_HOMEPAGE, rmi4_data->input_dev->keybit);
+	set_bit(KEY_F3, rmi4_data->input_dev->keybit);
 	set_bit(KEY_DOUBLE_TAP, rmi4_data->input_dev->keybit);
-	set_bit(KEY_POWER, rmi4_data->input_dev->keybit);
 	set_bit(KEY_GESTURE_CIRCLE, rmi4_data->input_dev->keybit);
 	set_bit(KEY_GESTURE_SWIPE_DOWN, rmi4_data->input_dev->keybit);
 	set_bit(KEY_GESTURE_V, rmi4_data->input_dev->keybit);
 	set_bit(KEY_GESTURE_LTR, rmi4_data->input_dev->keybit);
 	set_bit(KEY_GESTURE_GTR, rmi4_data->input_dev->keybit);
 	synaptics_ts_init_virtual_key(rmi4_data);
+
 	input_set_abs_params(rmi4_data->input_dev,
 			ABS_MT_POSITION_X, rmi4_data->snap_left,
 			rmi4_data->sensor_max_x-rmi4_data->snap_right, 0, 0);
