@@ -37,6 +37,7 @@
 			qcom,default-state = "off";
 			qcom,id = <3>;
 			qcom,pwm-us = <1000>;
+			linux,default-trigger = "none";
 			qcom,use-blink;
 		};
 
@@ -61,6 +62,7 @@
 			qcom,default-state = "off";
 			qcom,id = <4>;
 			qcom,pwm-us = <1000>;
+			linux,default-trigger = "none";
 			qcom,use-blink;
 		};
 
@@ -85,6 +87,7 @@
 			qcom,default-state = "off";
 			qcom,id = <5>;
 			qcom,pwm-us = <1000>;
+			linux,default-trigger = "none";
 			qcom,use-blink;
 		};
 	};
