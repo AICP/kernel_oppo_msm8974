@@ -40,16 +40,6 @@
 #include "wcd9320.h"
 #include "wcd9xxx-resmgr.h"
 #include "wcd9xxx-common.h"
-#ifdef CONFIG_VENDOR_EDIT
-//liuyan add for dvt
-#include <linux/pcb_version.h>
-//liuyan add for es325
-#ifdef CONFIG_SND_SOC_ES325
-#include "es325-export.h"
-#endif
-//liuyan add end
-#endif
-#include <linux/wakelock.h> //2014-2-13 xuzhaoan add for SVA patch
 
 #define TAIKO_MAD_SLIMBUS_TX_PORT 12
 #define TAIKO_MAD_AUDIO_FIRMWARE_PATH "wcd9320/wcd9320_mad_audio.bin"
@@ -73,11 +63,6 @@ static int high_perf_mode;
 module_param(high_perf_mode, int,
 			S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(high_perf_mode, "enable/disable class AB config for hph");
-
-#ifdef CONFIG_VENDOR_EDIT
-//liuyan add for dvt
-static int pcb_version;
-#endif
 
 static struct kernel_param_ops spkr_drv_wrnd_param_ops = {
 	.set = spkr_drv_wrnd_param_set,
@@ -318,11 +303,6 @@ static const DECLARE_TLV_DB_SCALE(digital_gain, 0, 1, 0);
 static const DECLARE_TLV_DB_SCALE(line_gain, 0, 7, 1);
 static const DECLARE_TLV_DB_SCALE(analog_gain, 0, 25, 1);
 static struct snd_soc_dai_driver taiko_dai[];
-#ifdef CONFIG_VENDOR_EDIT
-//liuyan add for dvt
-static struct snd_soc_dai_driver taiko_dai_es325[];
-//liuyan add end
-#endif
 static const DECLARE_TLV_DB_SCALE(aux_pga_gain, 0, 2, 0);
 
 /* Codec supports 2 IIR filters */
@@ -476,20 +456,13 @@ struct taiko_priv {
 	 * end of impedance measurement
 	 */
 	struct list_head reg_save_restore;
-	#ifdef CONFIG_VENDOR_EDIT
-	/*liuyan add 2013-11-26 for hpmic regulator*/
-	struct regulator	*cdc_hpmic_switch;
-	int hpmic_regulator_count;
-	/*endif*/
-	#endif
-
-	struct wake_lock taiko_mad_wlock; //2014-2-13 xuzhaoan add for SVA patch
 	struct pm_qos_request pm_qos_req;
 };
 
 /* OPPO 2013-11-12 xuzhaoan Add begin for American Headset Detect */
 #ifdef CONFIG_VENDOR_EDIT
-    struct taiko_priv *priv_headset_type;
+static struct regulator *cdc_hpmic_reg = NULL;
+static atomic_t cdc_hpmic_reg_ref;
 #endif
 /* OPPO 2013-11-12 xuzhaoan Add end */
 
@@ -545,7 +518,7 @@ static const struct comp_sample_dependent_params comp_samp_params[] = {
 		/* 192 Khz */
 		.peak_det_timeout = 0x0B,
 		.rms_meter_div_fact = 0xC,
-		.rms_meter_resamp_fact = 0x50,
+		.rms_meter_resamp_fact = 0xA0,
 	},
 };
 
@@ -572,35 +545,120 @@ static unsigned short tx_digital_gain_reg[] = {
 	TAIKO_A_CDC_TX9_VOL_CTL_GAIN,
 	TAIKO_A_CDC_TX10_VOL_CTL_GAIN,
 };
-//liuyan 2013-3-13 add for headset detect
+
 #ifdef CONFIG_VENDOR_EDIT
-enum
+static void hph_regulator_control(bool enable)
 {
-	NO_DEVICE	= 0,
-	HS_WITH_MIC	= 1,
-	HS_WITHOUT_MIC = 2,
-};
-static ssize_t wcd9xxx_print_name(struct switch_dev *sdev, char *buf)
-{
-	switch (switch_get_state(sdev))
-	{
-		case NO_DEVICE:
-			return sprintf(buf, "No Device\n");
-		case HS_WITH_MIC:
-            if(priv_headset_type->mbhc.mbhc_cfg->headset_type == 1) {
-		        return sprintf(buf, "American Headset\n");
-            } else {
-                return sprintf(buf, "Headset\n");
-            }
+	int ret = 0;
 
-		case HS_WITHOUT_MIC:
-			return sprintf(buf, "Handset\n");
+	if (!cdc_hpmic_reg)
+		return;
 
+	pr_debug("%s() enable: %d, ref count: %d",
+			__func__, enable, atomic_read(&cdc_hpmic_reg_ref));
+
+	if (enable) {
+		if (atomic_inc_return(&cdc_hpmic_reg_ref) == 1) {
+			ret = regulator_enable(cdc_hpmic_reg);
+			if (ret) {
+				pr_err("%s: Failed to enable cdc_hpmic\n",
+						__func__);
+			}
+		}
+	} else {
+		if (atomic_read(&cdc_hpmic_reg_ref) == 0)
+			return;
+
+		if (atomic_dec_return(&cdc_hpmic_reg_ref) == 0) {
+			ret = regulator_disable(cdc_hpmic_reg);
+			if (ret) {
+				pr_err("%s: Failed to disable cdc_hpmic\n",
+						__func__);
+			}
+		}
 	}
-	return -EINVAL;
+}
+
+static int taiko_codec_enable_hph_supply(struct snd_soc_dapm_widget *w,
+				       struct snd_kcontrol *kcontrol,
+				       int event)
+{
+	pr_debug("%s() %s: event: %d\n", __func__, w->name, event);
+
+	switch (event) {
+	case SND_SOC_DAPM_PRE_PMU:
+		hph_regulator_control(true);
+		break;
+	case SND_SOC_DAPM_POST_PMD:
+		hph_regulator_control(false);
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static int taiko_enable_ext_mb_source(struct snd_soc_codec *codec,
+				      bool turn_on, bool use_dapm)
+{
+	int ret = 0;
+	struct taiko_priv *taiko = snd_soc_codec_get_drvdata(codec);
+
+	if (taiko->mbhc.is_hs_inserted) {
+		return ret;
+	}
+
+	if (use_dapm) {
+		if (turn_on)
+			ret = snd_soc_dapm_force_enable_pin(&codec->dapm,
+					"MICBIAS_REGULATOR");
+		else
+			ret = snd_soc_dapm_disable_pin(&codec->dapm,
+					"MICBIAS_REGULATOR");
+
+		snd_soc_dapm_sync(&codec->dapm);
+	} else {
+		hph_regulator_control(turn_on);
+	}
+
+	if (ret)
+		dev_err(codec->dev, "%s: Failed to %s micbias source\n",
+			__func__, turn_on ? "enable" : "disable");
+	else
+		dev_dbg(codec->dev, "%s: %s micbias source\n",
+			__func__, turn_on ? "enable" : "disable");
+
+	return ret;
+}
+
+static int taiko_micbias_supply_init(struct device *dev)
+{
+	atomic_set(&cdc_hpmic_reg_ref, 0);
+
+	if (cdc_hpmic_reg == NULL) {
+		cdc_hpmic_reg = regulator_get(dev->parent, "cdc-hpmic_switch-1");
+		if (IS_ERR(cdc_hpmic_reg)) {
+			pr_err("%s: Cannot get regulator %s.\n",
+					__func__, "cdc-hpmic_switch-1");
+			return PTR_ERR(cdc_hpmic_reg);
+		}
+	}
+
+	return 0;
+}
+
+static int taiko_micbias_supply_close(void)
+{
+	atomic_set(&cdc_hpmic_reg_ref, 0);
+
+	if (cdc_hpmic_reg)
+		regulator_put(cdc_hpmic_reg);
+
+	return 0;
 }
 #endif
-//liuyan add end
+
 static int spkr_drv_wrnd_param_set(const char *val,
 				   const struct kernel_param *kp)
 {
@@ -707,8 +765,8 @@ static int taiko_put_anc_func(struct snd_kcontrol *kcontrol,
 		snd_soc_dapm_enable_pin(dapm, "EAR PA");
 		snd_soc_dapm_enable_pin(dapm, "EAR");
 	}
-	snd_soc_dapm_sync(dapm);
 	mutex_unlock(&dapm->codec->mutex);
+	snd_soc_dapm_sync(dapm);
 	return 0;
 }
 
@@ -1644,116 +1702,8 @@ static const struct soc_enum taiko_2_x_ear_pa_gain_enum =
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(taiko_2_x_ear_pa_gain_text),
 			taiko_2_x_ear_pa_gain_text);
 
-/*liuyan 2013-8-19 add for spk*/
-#ifdef CONFIG_VENDOR_EDIT
-#ifndef CONFIG_OPPO_DEVICE_FIND7OP
-/* xiaojun.lv@PhoneDpt.AudioDrv,2014/3/18,modify for 14001 spk control*/
-static int spkr_put_control(struct snd_kcontrol *kcontrol,
-				   struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
-	struct taiko_priv *taiko = snd_soc_codec_get_drvdata(codec);
-	unsigned int value;
-	value = ucontrol->value.integer.value[0];
-	printk("%s:val %d\n",__func__,value);
-	if(value){
-		//liuyan add for dvt
-		if(pcb_version>=HW_VERSION__12){
-		gpio_set_value(taiko->mbhc.mbhc_cfg->yda145_boost_gpio,1);
-		pr_debug("%s:gpio:%d %d\n",__func__,taiko->mbhc.mbhc_cfg->yda145_boost_gpio,
-			    gpio_get_value(taiko->mbhc.mbhc_cfg->yda145_boost_gpio));
-		msleep(20);
-		gpio_set_value(taiko->mbhc.mbhc_cfg->yda145_ctr_gpio,1);
-		pr_debug("%s:gpio:%d %d\n",__func__,taiko->mbhc.mbhc_cfg->yda145_ctr_gpio,
-			    gpio_get_value(taiko->mbhc.mbhc_cfg->yda145_ctr_gpio));
-		}
-		gpio_set_value(taiko->mbhc.mbhc_cfg->enable_spk_gpio,1);
-		pr_debug("%s:gpio:%d %d\n",__func__,taiko->mbhc.mbhc_cfg->enable_spk_gpio,
-			    gpio_get_value(taiko->mbhc.mbhc_cfg->enable_spk_gpio));
-	}else{
-		gpio_set_value(taiko->mbhc.mbhc_cfg->enable_spk_gpio,0);
-		pr_debug("%s:gpio:%d %d\n",__func__,taiko->mbhc.mbhc_cfg->enable_spk_gpio,
-			     gpio_get_value(taiko->mbhc.mbhc_cfg->enable_spk_gpio));
-		//liuyan add for dvt
-		if(pcb_version>=HW_VERSION__12){
-		gpio_set_value(taiko->mbhc.mbhc_cfg->yda145_ctr_gpio,0);
-		pr_debug("%s:gpio:%d %d\n",__func__,taiko->mbhc.mbhc_cfg->yda145_ctr_gpio,
-			    gpio_get_value(taiko->mbhc.mbhc_cfg->yda145_ctr_gpio));
-		msleep(20);
-		gpio_set_value(taiko->mbhc.mbhc_cfg->yda145_boost_gpio,0);
-		pr_debug("%s:gpio:%d %d\n",__func__,taiko->mbhc.mbhc_cfg->yda145_boost_gpio,
-			    gpio_get_value(taiko->mbhc.mbhc_cfg->yda145_boost_gpio));
-		}
-	}
-
-	return 0;
-}
-#else /* CONFIG_OPPO_DEVICE_FIND7OP */
-static int spkr_put_control(struct snd_kcontrol *kcontrol,
-				   struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
-	struct taiko_priv *taiko = snd_soc_codec_get_drvdata(codec);
-	unsigned int value;
-	value = ucontrol->value.integer.value[0];
-	printk("%s:val %d\n",__func__,value);
-	if(value){
-        if(taiko->mbhc.mbhc_cfg->cdc_spk)
-        {
-            pr_debug("%s regulator_enable(taiko->mbhc.mbhc_cfg->cdc_spk);\n",__func__);
-            regulator_enable(taiko->mbhc.mbhc_cfg->cdc_spk);
-            msleep(50);
-    	}
-
-		gpio_set_value(taiko->mbhc.mbhc_cfg->enable_spk_gpio,1);
-		pr_debug("%s:gpio:%d %d\n",__func__,taiko->mbhc.mbhc_cfg->enable_spk_gpio,
-			    gpio_get_value(taiko->mbhc.mbhc_cfg->enable_spk_gpio));
-
-        gpio_set_value(taiko->mbhc.mbhc_cfg->yda145_ctr_gpio,1);
-		pr_debug("%s:gpio:%d %d\n",__func__,taiko->mbhc.mbhc_cfg->yda145_ctr_gpio,
-			    gpio_get_value(taiko->mbhc.mbhc_cfg->yda145_ctr_gpio));
-
-	}else{
-		gpio_set_value(taiko->mbhc.mbhc_cfg->yda145_ctr_gpio,0);
-		pr_debug("%s:gpio:%d %d\n",__func__,taiko->mbhc.mbhc_cfg->yda145_ctr_gpio,
-			    gpio_get_value(taiko->mbhc.mbhc_cfg->yda145_ctr_gpio));	
-			    
-		gpio_set_value(taiko->mbhc.mbhc_cfg->enable_spk_gpio,0);
-		pr_debug("%s:gpio:%d %d\n",__func__,taiko->mbhc.mbhc_cfg->enable_spk_gpio,
-			     gpio_get_value(taiko->mbhc.mbhc_cfg->enable_spk_gpio));
-
-		if(taiko->mbhc.mbhc_cfg->cdc_spk)
-        {
-            pr_debug("%s regulator_disable(taiko->mbhc.mbhc_cfg->cdc_spk);\n",__func__);
-            msleep(50);
-            regulator_disable(taiko->mbhc.mbhc_cfg->cdc_spk);
-    	}
-	}
-
-	return 0;
-}
-#endif /* CONFIG_OPPO_DEVICE_FIND7OP */
-
-static int spkr_get_control(struct snd_kcontrol *kcontrol,
-				   struct snd_ctl_elem_value *ucontrol)
-{
-	/* struct snd_soc_codec *codec = es325_priv.codec; */
-	//unsigned int value;
-
-	//ucontrol->value.integer.value[0] = value;
-
-	return 0;
-}
-
-#endif
-/*liuyan add end*/
 static const struct snd_kcontrol_new taiko_2_x_analog_gain_controls[] = {
-//liuyan 2013-8-12 add power on max2777
-#ifdef CONFIG_VENDOR_EDIT
-	SOC_SINGLE_EXT("SPKR Enable", 0, 0, 1, 0,
-		                 spkr_get_control, spkr_put_control),
-#endif
-//liuyan add end
+
 	SOC_ENUM_EXT("EAR PA Gain", taiko_2_x_ear_pa_gain_enum,
 		taiko_pa_gain_get, taiko_pa_gain_put),
 
@@ -2989,10 +2939,9 @@ static int taiko_codec_config_mad(struct snd_soc_codec *codec)
 	const struct firmware *fw;
 	struct mad_audio_cal *mad_cal;
 	const char *filename = TAIKO_MAD_AUDIO_FIRMWARE_PATH;
-	struct taiko_priv *taiko = snd_soc_codec_get_drvdata(codec); //2014-2-13 xuzhaoan add for SVA patch
+	struct taiko_priv *taiko = snd_soc_codec_get_drvdata(codec);
 
 	pr_debug("%s: enter\n", __func__);
-	wake_lock(&taiko->taiko_mad_wlock); //2014-2-13 xuzhaoan add for SVA patch
 	/* wakeup for codec calibration access */
 	pm_qos_update_request(&taiko->pm_qos_req,
 			      msm_cpuidle_get_deep_idle_latency());
@@ -3065,8 +3014,6 @@ static int taiko_codec_config_mad(struct snd_soc_codec *codec)
 
 	release_firmware(fw);
 	pr_debug("%s: leave ret %d\n", __func__, ret);
-
-	wake_unlock(&taiko->taiko_mad_wlock); //2014-2-13 xuzhaoan add for SVA patch 2-25 uncomment this line to release wakelock to save power
 	pm_qos_update_request(&taiko->pm_qos_req,
 			      PM_QOS_DEFAULT_VALUE);
 	return ret;
@@ -5297,92 +5244,6 @@ static int taiko_hw_params(struct snd_pcm_substream *substream,
 
 	return 0;
 }
-//liuyan modify for es325
-#ifdef CONFIG_SND_SOC_ES325
-static int taiko_es325_hw_params(struct snd_pcm_substream *substream,
-		struct snd_pcm_hw_params *params,
-		struct snd_soc_dai *dai)
-{
-	int rc = 0;
-	dev_err(dai->dev,"%s: dai_name = %s DAI-ID %x rate %d num_ch %d\n", __func__,
-			dai->name, dai->id, params_rate(params),
-			params_channels(params));
-
-	rc = taiko_hw_params(substream, params, dai);
-
-	if (es325_remote_route_enable(dai))
-		rc = es325_slim_hw_params(substream, params, dai);
-
-	return rc;
-}
-
-#define SLIM_BUGFIX
-static int taiko_es325_set_channel_map(struct snd_soc_dai *dai,
-				unsigned int tx_num, unsigned int *tx_slot,
-				unsigned int rx_num, unsigned int *rx_slot)
-
-{
-#if !defined(SLIM_BUGFIX)
-	unsigned int taiko_tx_num = 0;
-#endif
-	unsigned int taiko_tx_slot[6];
-#if !defined(SLIM_BUGFIX)
-	unsigned int taiko_rx_num = 0;
-#endif
-	unsigned int taiko_rx_slot[6];
-#if defined(SLIM_BUGFIX)
-	unsigned int temp_tx_num = 0;
-	unsigned int temp_rx_num = 0;
-#endif
-	int rc = 0;
-
-	if (es325_remote_route_enable(dai)) {
-#if defined(SLIM_BUGFIX)
-		rc = taiko_get_channel_map(dai, &temp_tx_num, taiko_tx_slot,
-					&temp_rx_num, taiko_rx_slot);
-#else
-		rc = taiko_get_channel_map(dai, &taiko_tx_num, taiko_tx_slot,
-					&taiko_rx_num, taiko_rx_slot);
-#endif
-
-		rc = taiko_set_channel_map(dai, tx_num, taiko_tx_slot, rx_num, taiko_rx_slot);
-
-		rc = es325_slim_set_channel_map(dai, tx_num, tx_slot, rx_num, rx_slot);
-	} else
-		rc = taiko_set_channel_map(dai, tx_num, tx_slot, rx_num, rx_slot);
-
-	return rc;
-}
-
-static int taiko_es325_get_channel_map(struct snd_soc_dai *dai,
-				unsigned int *tx_num, unsigned int *tx_slot,
-				unsigned int *rx_num, unsigned int *rx_slot)
-
-{
-	int rc = 0;
-
-	if (es325_remote_route_enable(dai))
-		rc = es325_slim_get_channel_map(dai, tx_num, tx_slot, rx_num, rx_slot);
-	else
-		rc = taiko_get_channel_map(dai, tx_num, tx_slot, rx_num, rx_slot);
-
-	return rc;
-}
-#endif
-
-//liuyan 2013-12-19 modify for evt1 and evt2
-#ifdef CONFIG_SND_SOC_ES325
-static struct snd_soc_dai_ops taiko_dai_ops_es325 = {
-	.startup = taiko_startup,
-	.shutdown = taiko_shutdown,
-	.hw_params = taiko_es325_hw_params, /* tabla_hw_params, */
-	.set_sysclk = taiko_set_dai_sysclk,
-	.set_fmt = taiko_set_dai_fmt,
-	.set_channel_map = taiko_es325_set_channel_map, /* tabla_set_channel_map, */
-	.get_channel_map = taiko_es325_get_channel_map, /* tabla_get_channel_map, */
-};
-#endif
-//liuyan modify end
 
 static struct snd_soc_dai_ops taiko_dai_ops = {
 	.startup = taiko_startup,
@@ -5393,179 +5254,6 @@ static struct snd_soc_dai_ops taiko_dai_ops = {
 	.set_channel_map = taiko_set_channel_map,
 	.get_channel_map = taiko_get_channel_map,
 };
-
-//liuyan 2013-12-19 modify for evt1 and evt2
-#ifdef CONFIG_SND_SOC_ES325
-static struct snd_soc_dai_ops taiko_es325_dai_ops = {
-	.startup = taiko_startup,
-	.hw_params = taiko_es325_hw_params,
-	.set_channel_map = taiko_es325_set_channel_map,
-	.get_channel_map = taiko_es325_get_channel_map,
-};
-
-static struct snd_soc_dai_driver taiko_dai_es325[] = {
-	{
-		.name = "taiko_rx1",
-		.id = AIF1_PB,
-		.playback = {
-			.stream_name = "AIF1 Playback",
-			.rates = WCD9320_RATES,
-			.formats = TAIKO_FORMATS_S16_S24_LE,
-			.rate_max = 192000,
-			.rate_min = 8000,
-			.channels_min = 1,
-			.channels_max = 2,
-		},
-		.ops = &taiko_dai_ops_es325,
-	},
-	{
-		.name = "taiko_tx1",
-		.id = AIF1_CAP,
-		.capture = {
-			.stream_name = "AIF1 Capture",
-			.rates = WCD9320_RATES,
-			.formats = TAIKO_FORMATS,
-			.rate_max = 192000,
-			.rate_min = 8000,
-			.channels_min = 1,
-			.channels_max = 4,
-		},
-		.ops = &taiko_dai_ops_es325,
-	},
-	{
-		.name = "taiko_rx2",
-		.id = AIF2_PB,
-		.playback = {
-			.stream_name = "AIF2 Playback",
-			.rates = WCD9320_RATES,
-			.formats = TAIKO_FORMATS_S16_S24_LE,
-			.rate_min = 8000,
-			.rate_max = 192000,
-			.channels_min = 1,
-			.channels_max = 2,
-		},
-		.ops = &taiko_dai_ops_es325,
-	},
-	{
-		.name = "taiko_tx2",
-		.id = AIF2_CAP,
-		.capture = {
-			.stream_name = "AIF2 Capture",
-			.rates = WCD9320_RATES,
-			.formats = TAIKO_FORMATS,
-			.rate_max = 192000,
-			.rate_min = 8000,
-			.channels_min = 1,
-			.channels_max = 8,
-		},
-		.ops = &taiko_dai_ops_es325,
-	},
-	{
-		.name = "taiko_tx3",
-		.id = AIF3_CAP,
-		.capture = {
-			.stream_name = "AIF3 Capture",
-			.rates = WCD9320_RATES,
-			.formats = TAIKO_FORMATS,
-			.rate_max = 48000,
-			.rate_min = 8000,
-			.channels_min = 1,
-			.channels_max = 2,
-		},
-		.ops = &taiko_dai_ops_es325,
-	},
-	{
-		.name = "taiko_rx3",
-		.id = AIF3_PB,
-		.playback = {
-			.stream_name = "AIF3 Playback",
-			.rates = WCD9320_RATES,
-			.formats = TAIKO_FORMATS_S16_S24_LE,
-			.rate_min = 8000,
-			.rate_max = 192000,
-			.channels_min = 1,
-			.channels_max = 2,
-		},
-		.ops = &taiko_dai_ops_es325,
-	},
-	{
-		.name = "taiko_vifeedback",
-		.id = AIF4_VIFEED,
-		.capture = {
-			.stream_name = "VIfeed",
-			.rates = SNDRV_PCM_RATE_48000,
-			.formats = TAIKO_FORMATS,
-			.rate_max = 48000,
-			.rate_min = 48000,
-			.channels_min = 2,
-			.channels_max = 2,
-	 },
-		.ops = &taiko_dai_ops_es325,
-	},
-	{
-		.name = "taiko_mad1",
-		.id = AIF4_MAD_TX,
-		.capture = {
-			.stream_name = "AIF4 MAD TX",
-			.rates = SNDRV_PCM_RATE_16000,
-			.formats = TAIKO_FORMATS,
-			.rate_min = 16000,
-			.rate_max = 16000,
-			.channels_min = 1,
-			.channels_max = 1,
-		},
-		.ops = &taiko_dai_ops_es325,
-	},
-//liuyan add for es325
-#ifdef CONFIG_SND_SOC_ES325
-	{
-		.name = "taiko_es325_rx1",
-		.id = AIF1_PB + ES325_DAI_ID_OFFSET,
-		.playback = {
-			.stream_name = "AIF1 Playback",
-			.rates = WCD9320_RATES,
-			.formats = TAIKO_FORMATS,
-			.rate_max = 192000,
-			.rate_min = 8000,
-			.channels_min = 1,
-			.channels_max = 2,
-		},
-		.ops = &taiko_es325_dai_ops,
-	},
-	{
-		.name = "taiko_es325_tx1",
-		.id = AIF1_CAP + ES325_DAI_ID_OFFSET,
-		.capture = {
-			.stream_name = "AIF1 Capture",
-			.rates = WCD9320_RATES,
-			.formats = TAIKO_FORMATS,
-			.rate_max = 192000,
-			.rate_min = 8000,
-			.channels_min = 1,
-			.channels_max = 2,
-		},
-		.ops = &taiko_es325_dai_ops,
-	},
-	{
-		.name = "taiko_es325_rx2",
-		.id = AIF2_PB + ES325_DAI_ID_OFFSET,
-		.playback = {
-			.stream_name = "AIF2 Playback",
-			.rates = WCD9320_RATES,
-			.formats = TAIKO_FORMATS,
-			.rate_max = 192000,
-			.rate_min = 8000,
-			.channels_min = 1,
-			.channels_max = 2,
-		},
-		.ops = &taiko_es325_dai_ops,
-	},
-#endif
-//liuyan add end
-
-};
-#endif
-//liuyan modify end
 
 static struct snd_soc_dai_driver taiko_dai[] = {
 	{
@@ -5844,20 +5532,8 @@ static int taiko_codec_enable_slimrx(struct snd_soc_dapm_widget *w,
 		ret = wcd9xxx_cfg_slim_sch_rx(core, &dai->wcd9xxx_ch_list,
 					      dai->rate, dai->bit_width,
 					      &dai->grph);
-//liuyan add for es325, evt1 and evt2
-#ifdef CONFIG_SND_SOC_ES325
-       if(pcb_version==HW_VERSION__10)
-		    ret = es325_remote_cfg_slim_rx(w->shift);
-#endif
-//liuyan add end
 		break;
 	case SND_SOC_DAPM_POST_PMD:
-//liuyan add for es325, evt1 and evt2
-#ifdef CONFIG_SND_SOC_ES325
-       if(pcb_version==HW_VERSION__10)
-		    ret = es325_remote_close_slim_rx(w->shift);
-#endif
-//liuyan add end
 		ret = wcd9xxx_close_slim_sch_rx(core, &dai->wcd9xxx_ch_list,
 						dai->grph);
 		if (!dai->bus_down_in_recovery)
@@ -5986,20 +5662,8 @@ static int taiko_codec_enable_slimtx(struct snd_soc_dapm_widget *w,
 		ret = wcd9xxx_cfg_slim_sch_tx(core, &dai->wcd9xxx_ch_list,
 					      dai->rate, dai->bit_width,
 					      &dai->grph);
-//liuyan add for es325, evt1 and evt2
-#ifdef CONFIG_SND_SOC_ES325
-        if(pcb_version==HW_VERSION__10)
-		    ret = es325_remote_cfg_slim_tx(w->shift);
-#endif
-//liuyan add end
 		break;
 	case SND_SOC_DAPM_POST_PMD:
-//liuyan add for es325, evt1 and evt2
-#ifdef CONFIG_SND_SOC_ES325
-        if(pcb_version==HW_VERSION__10)
-		    ret = es325_remote_close_slim_tx(w->shift);
-#endif
-//liuyan add end
 		ret = wcd9xxx_close_slim_sch_tx(core, &dai->wcd9xxx_ch_list,
 						dai->grph);
 		if (!dai->bus_down_in_recovery)
@@ -6337,6 +6001,12 @@ static const struct snd_soc_dapm_widget taiko_dapm_widgets[] = {
 		&rx_dac5_mux),
 	SND_SOC_DAPM_MUX("RDAC7 MUX", SND_SOC_NOPM, 0, 0,
 		&rx_dac7_mux),
+
+#ifdef CONFIG_VENDOR_EDIT
+	SND_SOC_DAPM_SUPPLY("MICBIAS_REGULATOR", SND_SOC_NOPM, 0, 0,
+		taiko_codec_enable_hph_supply, SND_SOC_DAPM_PRE_PMU |
+		SND_SOC_DAPM_POST_PMD),
+#endif
 
 	SND_SOC_DAPM_MUX_E("CLASS_H_DSM MUX", SND_SOC_NOPM, 0, 0,
 		&class_h_dsm_mux, taiko_codec_dsm_mux_event,
@@ -7302,16 +6972,6 @@ int taiko_hs_detect(struct snd_soc_codec *codec,
 {
 	int rc;
 	struct taiko_priv *taiko = snd_soc_codec_get_drvdata(codec);
-	#ifdef CONFIG_VENDOR_EDIT
-       /*liuyan add for hpmic regulator*/
-	if(taiko->cdc_hpmic_switch){
-	    printk("%s: get the hpmic regulator\n",__func__);
-	    mbhc_cfg->cdc_hpmic_switch=taiko->cdc_hpmic_switch;
-	    mbhc_cfg->hpmic_regulator_count=taiko->hpmic_regulator_count;
-      }else{
-           printk("%s: do not get the regulator\n",__func__);
-      }
-	#endif
 	rc = wcd9xxx_mbhc_start(&taiko->mbhc, mbhc_cfg);
 	if (!rc)
 		taiko->mbhc_started = true;
@@ -7565,6 +7225,9 @@ static const struct wcd9xxx_mbhc_cb mbhc_cb = {
 	.get_cdc_type = taiko_get_cdc_type,
 	.setup_zdet = taiko_setup_zdet,
 	.compute_impedance = taiko_compute_impedance,
+#ifdef CONFIG_VENDOR_EDIT
+	.enable_mb_source = taiko_enable_ext_mb_source,
+#endif
 };
 
 static const struct wcd9xxx_mbhc_intr cdc_intr_ids = {
@@ -7852,26 +7515,9 @@ static int taiko_codec_probe(struct snd_soc_codec *codec)
 		pr_err("%s: mbhc init failed %d\n", __func__, ret);
 		goto err_init;
 	}
-//liuyan 2013-3-13 add, headset detec
 #ifdef CONFIG_VENDOR_EDIT
-       /*liuyan add for hpmic regulator*/
-	if(pdata->cdc_hpmic_switch){
-	    printk("%s: get the hpmic regulator\n",__func__);
-	    taiko->cdc_hpmic_switch=pdata->cdc_hpmic_switch;
-	    taiko->hpmic_regulator_count=pdata->hpmic_regulator_count;
-      }else{
-           printk("%s: do not get the regulator\n",__func__);
-      }
-
-	taiko->mbhc.wcd9xxx_sdev.name= "h2w";
-	taiko->mbhc.wcd9xxx_sdev.print_name = wcd9xxx_print_name;
-	ret = switch_dev_register(&taiko->mbhc.wcd9xxx_sdev);
-	if (ret)
-	{
-		goto err_switch_dev_register;
-	}
+	taiko_micbias_supply_init(codec->dev);
 #endif
-//liuyan add end
 	taiko->codec = codec;
 	for (i = 0; i < COMPANDER_MAX; i++) {
 		taiko->comp_enabled[i] = 0;
@@ -7905,14 +7551,7 @@ static int taiko_codec_probe(struct snd_soc_codec *codec)
 					   WCD9XXX_BANDGAP_AUDIO_MODE);
 		WCD9XXX_BG_CLK_UNLOCK(&taiko->resmgr);
 	}
-//liuyan add for es325, evt1 and evt2
-#ifdef CONFIG_SND_SOC_ES325
-      if(pcb_version==HW_VERSION__10){
-           printk("register es325....");
-	    es325_remote_add_codec_controls(codec);
-      	}
-#endif
-//liuyan add end
+
 	ptr = kmalloc((sizeof(taiko_rx_chs) +
 		       sizeof(taiko_tx_chs)), GFP_KERNEL);
 	if (!ptr) {
@@ -7981,9 +7620,6 @@ static int taiko_codec_probe(struct snd_soc_codec *codec)
 		goto err_irq;
 	}
 
-	wake_lock_init(&taiko->taiko_mad_wlock, WAKE_LOCK_SUSPEND,
-	        "taiko_mad_firmware_wlock"); //2014-2-13 xuzhaoan add for SVA patch
-
 	atomic_set(&kp_taiko_priv, (unsigned long)taiko);
 	mutex_lock(&dapm->codec->mutex);
 	snd_soc_dapm_disable_pin(dapm, "ANC HPHL");
@@ -7991,16 +7627,10 @@ static int taiko_codec_probe(struct snd_soc_codec *codec)
 	snd_soc_dapm_disable_pin(dapm, "ANC HEADPHONE");
 	snd_soc_dapm_disable_pin(dapm, "ANC EAR PA");
 	snd_soc_dapm_disable_pin(dapm, "ANC EAR");
-	snd_soc_dapm_sync(dapm);
 	mutex_unlock(&dapm->codec->mutex);
+	snd_soc_dapm_sync(dapm);
 
 	codec->ignore_pmdown_time = 1;
-
-/* OPPO 2013-11-12 xuzhaoan Add begin for America Headset Detect */
-#ifdef CONFIG_VENDOR_EDIT
-    priv_headset_type = taiko;
-#endif
-/* OPPO 2013-11-12 xuzhaoan Add end */
 
 	return ret;
 
@@ -8009,12 +7639,6 @@ err_irq:
 err_pdata:
 	kfree(ptr);
 err_nomem_slimch:
-//luiyan 2013-3-13 add for headset detect
-#ifdef CONFIG_VENDOR_EDIT
-switch_dev_unregister(&taiko->mbhc.wcd9xxx_sdev);
-err_switch_dev_register:
-#endif
-//liuyan add end
 	kfree(taiko);
 err_init:
 	return ret;
@@ -8033,6 +7657,10 @@ static int taiko_codec_remove(struct snd_soc_codec *codec)
 
 	taiko_cleanup_irqs(taiko);
 
+#ifdef CONFIG_VENDOR_EDIT
+	taiko_micbias_supply_close();
+#endif
+
 	/* cleanup MBHC */
 	wcd9xxx_mbhc_deinit(&taiko->mbhc);
 	/* cleanup resmgr */
@@ -8040,7 +7668,6 @@ static int taiko_codec_remove(struct snd_soc_codec *codec)
 
 	taiko->spkdrv_reg = NULL;
 
-	wake_lock_destroy(&taiko->taiko_mad_wlock); //2014-2-13 xuzhaoan add for SVA patch
 	kfree(taiko);
 	return 0;
 }
@@ -8098,24 +7725,9 @@ static const struct dev_pm_ops taiko_pm_ops = {
 static int __devinit taiko_probe(struct platform_device *pdev)
 {
 	int ret = 0;
-	if (wcd9xxx_get_intf_type() == WCD9XXX_INTERFACE_TYPE_SLIMBUS){
-		//liuyan 2013-12-19 modify for evt1 and evt2
-		#ifdef CONFIG_VENDOR_EDIT
-		pcb_version=get_pcb_version(); //add for dvt
-              printk("%s:pcb_version %d\n",__func__,pcb_version);
-		if(pcb_version==HW_VERSION__10){
-		ret = snd_soc_register_codec(&pdev->dev, &soc_codec_dev_taiko,
-			taiko_dai_es325, ARRAY_SIZE(taiko_dai_es325));
-		}else{
+	if (wcd9xxx_get_intf_type() == WCD9XXX_INTERFACE_TYPE_SLIMBUS)
 		ret = snd_soc_register_codec(&pdev->dev, &soc_codec_dev_taiko,
 			taiko_dai, ARRAY_SIZE(taiko_dai));
-		}
-		#else
-		ret = snd_soc_register_codec(&pdev->dev, &soc_codec_dev_taiko,
-			taiko_dai, ARRAY_SIZE(taiko_dai));
-		#endif
-		//liuyan modify end
-	}
 	else if (wcd9xxx_get_intf_type() == WCD9XXX_INTERFACE_TYPE_I2C)
 		ret = snd_soc_register_codec(&pdev->dev, &soc_codec_dev_taiko,
 			taiko_i2s_dai, ARRAY_SIZE(taiko_i2s_dai));
