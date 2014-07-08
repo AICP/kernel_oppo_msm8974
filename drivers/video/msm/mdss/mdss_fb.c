@@ -2527,8 +2527,6 @@ static int mdss_fb_display_commit(struct fb_info *info,
 	return ret;
 }
 
-<<<<<<< HEAD
-=======
 static int __ioctl_wait_idle(struct msm_fb_data_type *mfd, u32 cmd)
 {
 	int ret = 0;
@@ -2551,7 +2549,6 @@ static int __ioctl_wait_idle(struct msm_fb_data_type *mfd, u32 cmd)
 	return ret;
 }
 
->>>>>>> f94131b... msm: display: reduce display commit prepare waiting time
 static int mdss_fb_ioctl(struct fb_info *info, unsigned int cmd,
 			 unsigned long arg)
 {
