@@ -422,7 +422,7 @@ static struct device_attribute attrs[] = {
 	__ATTR(log_level, (S_IRUGO | S_IWUSR),
 			synaptics_attr_loglevel_show,
 			synaptics_attr_loglevel_store),
-	__ATTR(holstere_open_or_close, (S_IRUGO | S_IWUSR),
+	__ATTR(holster_open_or_close, (S_IRUGO | S_IWUSR),
 			synaptics_rmi4_open_or_close_holster_mode_show,
 			synaptics_rmi4_open_or_close_holster_mode_store),
 };
@@ -556,6 +556,8 @@ static ssize_t synaptics_rmi4_0dbutton_store(struct device *dev,
 		return -ENODEV;
 
 	list_for_each_entry(fhandler, &rmi->support_fn_list, link) {
+		if (fhandler == NULL)
+			continue;
 		if (fhandler->fn_number == SYNAPTICS_RMI4_F1A) {
 			ii = fhandler->intr_reg_num;
 
@@ -608,27 +610,27 @@ static ssize_t synaptics_rmi4_open_or_close_holster_mode_store(struct device *de
 {
 	unsigned int input;
 	struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(dev);
-    uint8_t  databuf;
+	uint8_t databuf;
+
 	if (sscanf(buf, "%u", &input) != 1)
 		return -EINVAL;
 
-	if (input == 1)
-	{
-		rmi4_data->holstere_mode_open_or_close= 1;//open holstere mode 
-		synaptics_rmi4_i2c_write(rmi4_data,rmi4_data->holstere_mode_control_addr,(unsigned char*)&(rmi4_data->holstere_mode_open_or_close),1);
-	}
-	else if (input == 0)
-	{
-		rmi4_data->holstere_mode_open_or_close = 0;//close holstere mode 
-		synaptics_rmi4_i2c_write(rmi4_data,rmi4_data->holstere_mode_control_addr,(unsigned char*)&(rmi4_data->holstere_mode_open_or_close),1);
-	}
-	else
+	if (input == 1) {
+		rmi4_data->holster_mode_open_or_close = 1;
+		synaptics_rmi4_i2c_write(rmi4_data,rmi4_data->holster_mode_control_addr,
+				(unsigned char *)&(rmi4_data->holster_mode_open_or_close), 1);
+	} else if (input == 0) {
+		rmi4_data->holster_mode_open_or_close = 0;
+		synaptics_rmi4_i2c_write(rmi4_data,rmi4_data->holster_mode_control_addr,
+				(unsigned char*)&(rmi4_data->holster_mode_open_or_close), 1);
+	} else
 		return -EINVAL;
-    
-    synaptics_rmi4_i2c_read(rmi4_data, rmi4_data->holstere_mode_control_addr, &databuf,1) ;
-	printk("%s holstere mode %s\n",input ? "open" : "close",
-			(databuf == (rmi4_data->holstere_mode_open_or_close) ) ? "success" : "fail");
-			
+
+	synaptics_rmi4_i2c_read(rmi4_data, rmi4_data->holster_mode_control_addr, &databuf, 1);
+	printk("%s holster mode %s\n",input ? "open" : "close",
+			(databuf == (rmi4_data->holster_mode_open_or_close)) ?
+			"success" : "fail");
+
 	return count;
 }
 
@@ -636,11 +638,12 @@ static ssize_t synaptics_rmi4_open_or_close_holster_mode_show(struct device *dev
 		struct device_attribute *attr, char *buf)
 {
 	struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(dev);
-    uint8_t  databuf;
-    
-    synaptics_rmi4_i2c_read(rmi4_data, rmi4_data->holstere_mode_control_addr, &databuf,1) ;
-	return sprintf(buf, " holstere mode is %s \n",databuf ? "open" : "close" ); 
+	uint8_t databuf;
+
+	synaptics_rmi4_i2c_read(rmi4_data, rmi4_data->holster_mode_control_addr, &databuf, 1);
+	return sprintf(buf, " holster mode is %s \n", databuf ? "open" : "close" );
 }
+
 /**
  * synaptics_rmi4_set_page()
  *
@@ -2944,6 +2947,8 @@ static void synaptics_rmi4_sensor_report(struct synaptics_rmi4_data *rmi4_data)
 	 */
 	if (!list_empty(&rmi->support_fn_list)) {
 		list_for_each_entry(fhandler, &rmi->support_fn_list, link) {
+			if (fhandler == NULL)
+				continue;
 			if (fhandler->num_of_data_sources) {
 				if (fhandler->intr_mask &
 						intr[fhandler->intr_reg_num]) {
@@ -2957,6 +2962,8 @@ static void synaptics_rmi4_sensor_report(struct synaptics_rmi4_data *rmi4_data)
 	mutex_lock(&exp_data.mutex);
 	if (!list_empty(&exp_data.list)) {
 		list_for_each_entry(exp_fhandler, &exp_data.list, link) {
+			if (exp_fhandler == NULL)
+				continue;
 			if (exp_fhandler->inserted &&
 					(exp_fhandler->func_attn != NULL))
 				exp_fhandler->func_attn(rmi4_data, intr[0]);
@@ -3889,6 +3896,8 @@ flash_prog_mode:
 	 */
 	if (!list_empty(&rmi->support_fn_list)) {
 		list_for_each_entry(fhandler, &rmi->support_fn_list, link) {
+			if (fhandler == NULL)
+				continue;
 			if (fhandler->num_of_data_sources) {
 				rmi4_data->intr_mask[fhandler->intr_reg_num] |=
 					fhandler->intr_mask;
@@ -3961,6 +3970,8 @@ static void synaptics_rmi4_set_params(struct synaptics_rmi4_data *rmi4_data)
 	f1a = NULL;
 	if (!list_empty(&rmi->support_fn_list)) {
 		list_for_each_entry(fhandler, &rmi->support_fn_list, link) {
+            if (fhandler == NULL)
+                continue;
 			if (fhandler->fn_number == SYNAPTICS_RMI4_F1A)
 				f1a = fhandler->data;
 		}
@@ -4187,6 +4198,8 @@ static void synaptics_rmi4_exp_fn_work(struct work_struct *work)
 				exp_fhandler_temp,
 				&exp_data.list,
 				link) {
+            if (exp_fhandler == NULL)
+                continue;
 			if ((exp_fhandler->func_init != NULL) &&
 					(exp_fhandler->inserted == false)) {
 				if(exp_fhandler->func_init(rmi4_data) < 0) {
@@ -4253,6 +4266,8 @@ void synaptics_rmi4_new_function(enum exp_fn fn_type, bool insert,
 		list_add_tail(&exp_fhandler->link, &exp_data.list);
 	} else if (!list_empty(&exp_data.list)) {
 		list_for_each_entry(exp_fhandler, &exp_data.list, link) {
+            if (exp_fhandler == NULL)
+                continue;
 			if (exp_fhandler->fn_type == fn_type) {
 				exp_fhandler->func_init = NULL;
 				exp_fhandler->func_attn = NULL;
