@@ -11,7 +11,7 @@
  *
  */
 
-#ifdef CONFIG_OPPO_DEVICE_FIND7
+#ifdef CONFIG_MSMB_CAMERA_OPPO
 #include <media/msm_camera_find7.h>
 #else
 
@@ -2287,4 +2287,4 @@ struct msm_ver_num_info {
 	(handle |= (0x1 << 7) | (data & 0x7F))
 
 #endif /* __LINUX_MSM_CAMERA_H */
-#endif /* CONFIG_OPPO_DEVICE_FIND7 */
+#endif /* CONFIG_MSMB_CAMERA_OPPO */

@@ -1,4 +1,4 @@
-#ifdef CONFIG_OPPO_DEVICE_FIND7
+#ifdef CONFIG_MSMB_CAMERA_OPPO
 #include <media/msm_cam_sensor_find7.h>
 #else
 
@@ -671,4 +671,4 @@ struct sensor_init_cfg_data {
 #define MSM_V4L2_PIX_FMT_META v4l2_fourcc('M', 'E', 'T', 'A') /* META */
 
 #endif /* __LINUX_MSM_CAM_SENSOR_H */
-#endif /* CONFIG_OPPO_DEVICE_FIND7 */
+#endif /* CONFIG_MSMB_CAMERA_OPPO */
