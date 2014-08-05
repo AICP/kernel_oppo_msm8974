@@ -469,21 +469,22 @@ extern int set_cabc(int level);
 extern int cabc_mode;
 
 static ssize_t mdss_get_cabc(struct device *dev,
-		struct device_attribute *attr, char *buf)
+				struct device_attribute *attr, char *buf)
 {
 	printk(KERN_INFO "get cabc mode = %d\n",cabc_mode);
-
-    return sprintf(buf, "%d\n", cabc_mode);
+	return sprintf(buf, "%d\n", cabc_mode);
 }
 
 static ssize_t mdss_set_cabc(struct device *dev,
-                               struct device_attribute *attr,
-                               const char *buf, size_t count)
+				struct device_attribute *attr,
+				const char *buf, size_t count)
 {
-    int level = 0;
-    sscanf(buf, "%du", &level);
-    set_cabc(level);
-    return count;
+	int level = 0;
+
+	sscanf(buf, "%d", &level);
+	pr_info("new level is %d\n", level);
+	set_cabc(level);
+	return count;
 }
 
 #endif /*VENDOR_EDIT*/

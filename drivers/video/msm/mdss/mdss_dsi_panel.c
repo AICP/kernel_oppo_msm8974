@@ -321,88 +321,99 @@ void set_resume_gamma(int index)
 
 int set_cabc(int level)
 {
-    int ret = 0;
-	if (get_pcb_version() >= HW_VERSION__20) { /* For Find7s */
-        return 0;
-    }
+	int ret = 0;
+
+	//if (get_pcb_version() >= HW_VERSION__20) { /* For Find7s */
+	//	pr_info("pcb revision %d\n", get_pcb_version());
+	//	return 0;
+	//}
+
 	printk("%s : %d \n",__func__,level);
-    mutex_lock(&cabc_mutex);
+	mutex_lock(&cabc_mutex);
 	
-	if(flag_lcd_off == true)
-    {
-        printk(KERN_INFO "lcd is off,don't allow to set cabc\n");
-        cabc_mode = level;
-        mutex_unlock(&cabc_mutex);
-        return 0;
-    }
+	if(flag_lcd_off == true) {
+		printk(KERN_INFO "lcd is off,don't allow to set cabc\n");
+		cabc_mode = level;
+		mutex_unlock(&cabc_mutex);
+		return 0;
+	}
 
-    mdss_dsi_clk_ctrl(panel_data, 1);
+	mdss_dsi_clk_ctrl(panel_data, 1);
 
-    switch(level)
-    {
-        case 0:
-            set_backlight_pwm(0);
-			 mdss_dsi_panel_cmds_send(panel_data, &cabc_off_sequence);
-            cabc_mode = CABC_CLOSE;
-            break;
+	switch(level) {
+	case 0:
+		set_backlight_pwm(0);
+		mdss_dsi_panel_cmds_send(panel_data, &cabc_off_sequence);
+		cabc_mode = CABC_CLOSE;
+		break;
         case 1:
-            mdss_dsi_panel_cmds_send(panel_data, &cabc_user_interface_image_sequence);
-            cabc_mode = CABC_LOW_MODE;
-			set_backlight_pwm(1);
-            break;
+		mdss_dsi_panel_cmds_send(panel_data,
+			&cabc_user_interface_image_sequence);
+		cabc_mode = CABC_LOW_MODE;
+		set_backlight_pwm(1);
+		break;
         case 2:
-            mdss_dsi_panel_cmds_send(panel_data, &cabc_still_image_sequence);
-            cabc_mode = CABC_MIDDLE_MODE;
-			set_backlight_pwm(1);
-            break;
+		mdss_dsi_panel_cmds_send(panel_data,
+			&cabc_still_image_sequence);
+		cabc_mode = CABC_MIDDLE_MODE;
+		set_backlight_pwm(1);
+		break;
         case 3:
-            mdss_dsi_panel_cmds_send(panel_data, &cabc_video_image_sequence);
-            cabc_mode = CABC_HIGH_MODE;
-			set_backlight_pwm(1);
-            break;
+		mdss_dsi_panel_cmds_send(panel_data,
+			&cabc_video_image_sequence);
+		cabc_mode = CABC_HIGH_MODE;
+		set_backlight_pwm(1);
+		break;
         default:
-            pr_err("%s Leavel %d is not supported!\n",__func__,level);
-            ret = -1;
-            break;
-    }
-    mdss_dsi_clk_ctrl(panel_data, 0);
-    mutex_unlock(&cabc_mutex);
-    return ret;
+		pr_err("%s Leavel %d is not supported!\n",__func__,level);
+		ret = -1;
+		break;
+	}
+	mdss_dsi_clk_ctrl(panel_data, 0);
+	mutex_unlock(&cabc_mutex);
 
+	return ret;
 }
 
 static int set_cabc_resume_mode(int mode)
 {
-    int ret;
-	if (get_pcb_version() >= HW_VERSION__20) { /* For Find7s */
-        return 0;
-    }
+	int ret;
+
+	//if (get_pcb_version() >= HW_VERSION__20) { /* For Find7s */
+	//	pr_info("pcb revision %d\n", get_pcb_version());
+	//	return 0;
+	//}
+
 	printk("%s : %d yxr \n",__func__,mode);
-    switch(mode)
-    {
-        case 0:
-            set_backlight_pwm(0);
-			mdss_dsi_panel_cmds_send(panel_data, &cabc_off_sequence);
-            break;
-        case 1:
-            mdss_dsi_panel_cmds_send(panel_data, &cabc_user_interface_image_sequence);
-			set_backlight_pwm(1);
-            break;
-        case 2:
-            mdss_dsi_panel_cmds_send(panel_data, &cabc_still_image_sequence);
-			set_backlight_pwm(1);
-            break;
-        case 3:
-           mdss_dsi_panel_cmds_send(panel_data, &cabc_video_image_sequence);
-		   set_backlight_pwm(1);
-            break;
-        default:
-            pr_err("%s  %d is not supported!\n",__func__,mode);
-            ret = -1;
-            break;
-    }
-    return ret;
+
+	switch(mode) {
+	case 0:
+		set_backlight_pwm(0);
+		mdss_dsi_panel_cmds_send(panel_data, &cabc_off_sequence);
+		break;
+	case 1:
+		mdss_dsi_panel_cmds_send(panel_data,
+			&cabc_user_interface_image_sequence);
+		set_backlight_pwm(1);
+		break;
+	case 2:
+		mdss_dsi_panel_cmds_send(panel_data,
+			&cabc_still_image_sequence);
+		set_backlight_pwm(1);
+		break;
+	case 3:
+		mdss_dsi_panel_cmds_send(panel_data,
+			&cabc_video_image_sequence);
+		set_backlight_pwm(1);
+		break;
+	default:
+		pr_err("%s  %d is not supported!\n",__func__,mode);
+		ret = -1;
+		break;
+	}
+	return ret;
 }
+
 #endif /*VENDOR_EDIT*/
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
 {
@@ -857,18 +868,21 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 	mipi  = &pdata->panel_info.mipi;
-	pr_err("%s: gpio 58=%d,pannel index=%d\n", __func__,gpio_get_value(58),ctrl->index);
+	pr_err("%s: gpio 58=%d,pannel index=%d\n", __func__,
+		gpio_get_value(58),ctrl->index);
 	pr_debug("%s: ctrl=%p ndx=%d\n", __func__, ctrl, ctrl->ndx);
 
 	if (ctrl->on_cmds.cmd_cnt){
 //yang hai and
-			if( (ctrl->index==0 && LCD_id < 4) || (ctrl->index==1 && (LCD_id ==4 || get_pcb_version()>=22))){
+		if((ctrl->index==0 && LCD_id < 4) ||
+		   (ctrl->index==1 && (LCD_id ==4 ||
+		    get_pcb_version()>=22))){
 //yanghai and end
-					mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);
-                    pr_err("%s: send cmd successfully\n", __func__);
-					set_resume_gamma(gamma_index);
-						//set_resume_gamma(2);
-				}
+			mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);
+			pr_err("%s: send cmd successfully\n", __func__);
+			set_resume_gamma(gamma_index);
+			//set_resume_gamma(2);
+		}
 	}
 	//yanghai  test
 //if(ctrl->index==0){
@@ -881,7 +895,11 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 #ifdef VENDOR_EDIT
 /* Xiaori.Yuan@Mobile Phone Software Dept.Driver, 2014/02/17  Add for set cabc */
 	if(ctrl->index==0){
-		set_backlight_pwm(1);
+		if (cabc_mode != 0)
+			set_backlight_pwm(1);
+		else
+			set_backlight_pwm(0);
+
 		if(cabc_mode != CABC_HIGH_MODE){
 				set_cabc_resume_mode(cabc_mode);
 		}
