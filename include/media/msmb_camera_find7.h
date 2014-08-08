@@ -1,7 +1,3 @@
-#ifdef CONFIG_MSMB_CAMERA_OPPO
-#include <media/msmb_camera_find7.h>
-#else
-
 #ifndef __LINUX_MSMB_CAMERA_H
 #define __LINUX_MSMB_CAMERA_H
 
@@ -40,7 +36,6 @@
 #define MSM_CAMERA_SUBDEV_LED_FLASH    11
 #define MSM_CAMERA_SUBDEV_STROBE_FLASH 12
 #define MSM_CAMERA_SUBDEV_BUF_MNGR     13
-#define MSM_CAMERA_SUBDEV_SENSOR_INIT  14
 
 #define MSM_MAX_CAMERA_SENSORS  5
 
@@ -173,4 +168,3 @@ struct msm_v4l2_format_data {
 #define MSM_V4L2_PIX_FMT_STATS_BHST v4l2_fourcc('B', 'H', 'S', 'T')
 
 #endif /* __LINUX_MSMB_CAMERA_H */
-#endif /* CONFIG_MSMB_CAMERA_OPPO */
