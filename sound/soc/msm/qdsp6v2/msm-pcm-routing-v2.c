@@ -257,6 +257,7 @@ static struct msm_pcm_routing_bdai_data msm_bedais[MSM_BACKEND_DAI_MAX] = {
 	{ AUDIO_PORT_ID_I2S_RX,           0, 0, 0, 0, 0},
 	{ AFE_PORT_ID_SECONDARY_PCM_RX,	  0, 0, 0, 0, 0},
 	{ AFE_PORT_ID_SECONDARY_PCM_TX,   0, 0, 0, 0, 0},
+	{ AFE_PORT_ID_SECONDARY_MI2S_RX_VIBRA, 0, 0, 0, 0, 0},
 };
 
 
@@ -434,7 +435,7 @@ void msm_pcm_routing_reg_phy_stream(int fedai_id, int perf_mode,
 				path_type,
 				msm_bedais[i].sample_rate,
 				msm_bedais[i].channel,
-				topology, false,
+				topology, perf_mode,
 				bits_per_sample);
 
 			payload.copp_ids[payload.num_copps++] =
@@ -1743,6 +1744,12 @@ static const struct snd_kcontrol_new tertiary_mi2s_rx_mixer_controls[] = {
 	msm_routing_put_audio_mixer),
 	SOC_SINGLE_EXT("MultiMedia4", MSM_BACKEND_DAI_TERTIARY_MI2S_RX,
 	MSM_FRONTEND_DAI_MULTIMEDIA4, 1, 0, msm_routing_get_audio_mixer,
+	msm_routing_put_audio_mixer),
+};
+
+static const struct snd_kcontrol_new secondary_mi2s_rx2_mixer_controls[] = {
+	SOC_SINGLE_EXT("MultiMedia6", MSM_BACKEND_DAI_SECONDARY_MI2S_RX_VIBRA,
+	MSM_FRONTEND_DAI_MULTIMEDIA6, 1, 0, msm_routing_get_audio_mixer,
 	msm_routing_put_audio_mixer),
 };
 
@@ -3378,6 +3385,9 @@ static const struct snd_soc_dapm_widget msm_qdsp6_widgets[] = {
 						0, 0, 0, 0),
 	SND_SOC_DAPM_AIF_OUT("SEC_MI2S_RX", "Secondary MI2S Playback",
 			     0, 0, 0, 0),
+	SND_SOC_DAPM_AIF_OUT("SEC_MI2S_RX_VIBRA",
+			"Secondary MI2S Playback Vibra",
+			0, 0, 0, 0),
 	SND_SOC_DAPM_AIF_OUT("PRI_MI2S_RX", "Primary MI2S Playback",
 			     0, 0, 0, 0),
 	SND_SOC_DAPM_AIF_IN("PRI_I2S_TX", "Primary I2S Capture", 0, 0, 0, 0),
@@ -3478,6 +3488,9 @@ static const struct snd_soc_dapm_widget msm_qdsp6_widgets[] = {
 	SND_SOC_DAPM_MIXER("SEC_MI2S_RX Audio Mixer", SND_SOC_NOPM, 0, 0,
 			   secondary_mi2s_rx_mixer_controls,
 			   ARRAY_SIZE(secondary_mi2s_rx_mixer_controls)),
+	SND_SOC_DAPM_MIXER("SEC_MI2S_RX_VIBRA Audio Mixer", SND_SOC_NOPM, 0, 0,
+			   secondary_mi2s_rx2_mixer_controls,
+			   ARRAY_SIZE(secondary_mi2s_rx2_mixer_controls)),
 	SND_SOC_DAPM_MIXER("SEC_MI2S_RX Port Mixer", SND_SOC_NOPM, 0, 0,
 			   mi2s_hl_mixer_controls,
 			   ARRAY_SIZE(mi2s_hl_mixer_controls)),
@@ -3743,6 +3756,9 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"SEC_MI2S_RX Audio Mixer", "MultiMedia4", "MM_DL4"},
 	{"SEC_MI2S_RX Audio Mixer", "MultiMedia5", "MM_DL5"},
 	{"SEC_MI2S_RX", NULL, "SEC_MI2S_RX Audio Mixer"},
+
+	{"SEC_MI2S_RX_VIBRA Audio Mixer", "MultiMedia6", "MM_DL6"},
+	{"SEC_MI2S_RX_VIBRA", NULL, "SEC_MI2S_RX_VIBRA Audio Mixer"},
 
 	{"SEC_MI2S_RX Port Mixer", "PRI_MI2S_TX", "PRI_MI2S_TX"},
 	{"SEC_MI2S_RX Port Mixer", "INTERNAL_FM_TX", "INT_FM_TX"},
@@ -4221,6 +4237,7 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"BE_OUT", NULL, "QUAT_MI2S_RX"},
 	{"BE_OUT", NULL, "TERT_MI2S_RX"},
 	{"BE_OUT", NULL, "SEC_MI2S_RX"},
+	{"BE_OUT", NULL, "SEC_MI2S_RX_VIBRA"},
 	{"BE_OUT", NULL, "PRI_MI2S_RX"},
 	{"BE_OUT", NULL, "INT_BT_SCO_RX"},
 	{"BE_OUT", NULL, "INT_FM_RX"},
