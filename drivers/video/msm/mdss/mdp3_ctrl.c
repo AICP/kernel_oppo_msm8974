@@ -1733,6 +1733,9 @@ static int mdp3_ctrl_ioctl_handler(struct msm_fb_data_type *mfd,
 		if (rc)
 			pr_err("OVERLAY_PLAY failed (%d)\n", rc);
 		break;
+	case MSMFB_OVERLAY_PREPARE:
+		rc = mdp3_overlay_prepare(mfd, argp);
+		break;
 	default:
 		break;
 	}
