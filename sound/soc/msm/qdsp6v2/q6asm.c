@@ -1750,7 +1750,7 @@ static void q6asm_add_hdr_custom_topology(struct audio_client *ac,
 	hdr->src_port = ((ac->session << 8) & 0xFF00) | 0x01;
 	hdr->dest_port = 0;
 	if (cmd_flg) {
-		hdr->token = ((ac->session << 8) | 0x0001) ;
+		hdr->token = ((ac->session << 8) | 0x0001);
 	}
 	hdr->pkt_size  = pkt_size;
 	mutex_unlock(&ac->cmd_lock);
