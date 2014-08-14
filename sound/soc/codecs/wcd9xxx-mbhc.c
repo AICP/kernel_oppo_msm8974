@@ -2670,7 +2670,6 @@ static void wcd9xxx_mbhc_decide_swch_plug(struct wcd9xxx_mbhc *mbhc)
 #ifdef CONFIG_VENDOR_EDIT
 	plug_type=PLUG_TYPE_INVALID;
 #else
-/*
 	if (current_source_enable) {
 		wcd9xxx_turn_onoff_current_source(mbhc, &mbhc->mbhc_bias_regs,
 						  true, false);
@@ -2688,7 +2687,6 @@ static void wcd9xxx_mbhc_decide_swch_plug(struct wcd9xxx_mbhc *mbhc)
 		plug_type = wcd9xxx_codec_get_plug_type(mbhc, true);
 		wcd9xxx_turn_onoff_override(mbhc, false);
 	}
-*/
 #endif
        //liuyan modify end
 	if (wcd9xxx_swch_level_remove(mbhc)) {
