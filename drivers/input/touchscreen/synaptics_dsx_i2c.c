@@ -4375,7 +4375,7 @@ static int fb_notifier_callback(struct notifier_block *p,
 		unsigned long event, void *data)
 {
 	struct fb_event *evdata = data;
-	int new_status;
+	int new_status ;
 
 	mutex_lock(&syna_rmi4_data->ops_lock);
 
@@ -4385,8 +4385,11 @@ static int fb_notifier_callback(struct notifier_block *p,
 			if (new_status == syna_rmi4_data->old_status)
 				break;
 
-			if (new_status != UNBLANK) {
+			if(new_status != UNBLANK) {
 				print_ts(TS_DEBUG, KERN_ERR "[syna]:suspend tp\n");
+#ifdef CONFIG_OPPO_DEVICE_FIND7OP
+				synaptics_rmi4_reset_device(syna_rmi4_data, syna_rmi4_data->f01_cmd_base_addr);
+#endif
 				synaptics_rmi4_suspend(&(syna_rmi4_data->input_dev->dev));
 			}
 			else {
