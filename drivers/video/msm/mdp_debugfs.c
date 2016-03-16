@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012, 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2012, 2016 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -638,6 +638,12 @@ static void mddi_reg_write(int ndx, uint32 off, uint32 data)
 	else
 		base = (char *)msm_pmdh_base;
 
+	if (base == NULL) {
+		printk(KERN_INFO "%s: base offset is not set properly. \
+			Please check if MDDI is enabled correctly\n", __func__);
+		return;
+	}
+
 	if (off > MDDI_MAX_OFFSET) {
 		printk(KERN_INFO "%s: Invalid offset=%x > %x\n", __func__,
 				off, MDDI_MAX_OFFSET);
@@ -1123,6 +1129,8 @@ static ssize_t dbg_force_ov0_blt_write(
 	debug_buf[count] = 0;	/* end of string */
 
 	cnt = sscanf(debug_buf, "%x", &dbg_force_ov0_blt);
+	if (cnt != 1)
+	  return -EFAULT;
 
 	pr_info("%s: dbg_force_ov0_blt = %x\n",
 		__func__, dbg_force_ov0_blt);
@@ -1186,6 +1194,8 @@ static ssize_t dbg_force_ov1_blt_write(
 	debug_buf[count] = 0;	/* end of string */
 
 	cnt = sscanf(debug_buf, "%x", &dbg_force_ov1_blt);
+	if (cnt != 1)
+		return -EFAULT;
 
 	pr_info("%s: dbg_force_ov1_blt = %x\n",
 		__func__, dbg_force_ov1_blt);
